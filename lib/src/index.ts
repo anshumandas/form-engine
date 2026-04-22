@@ -1,0 +1,29 @@
+/**
+ * @form-engine/react — library entry point
+ *
+ * Quick start:
+ *   npm install @form-engine/react
+ *
+ *   import { FormEngine, loadManifest } from '@form-engine/react';
+ *   const manifest = await loadManifest('/forms/onboarding.yaml');
+ *   <FormEngine manifest={manifest} formId="onboarding" onSubmit={handleSubmit} />
+ */
+export { FormEngine, FieldRouter } from "./components/FormEngine";
+export { SafeFormEngine }          from "./components/FormEngine/safe";
+export { FormErrorBoundary }       from "./components/FormEngine/FormErrorBoundary";
+export { useFormEngine, useFormEngineInit } from "./hooks/useFormEngine";
+export { useFormEngineStore }              from "./store/form-engine-store";
+export { loadManifest }                    from "./lib/manifest-loader";
+export { evaluateCondition, evaluateComputed, validateField } from "./lib/condition-evaluator";
+export type {
+  FormManifest, FormDef, FormLayout, FormField, FieldBase,
+  TextField, MultilineField, RichTextField, BooleanField, NumberField,
+  SelectField, MultiselectField, DateField, TimeField, DateTimeField,
+  DateRangeField, FileField, RatingField, ColorField, JsonField,
+  SignatureField, LocationField, HiddenField, BoundField,
+  Page, Section, Collection, SubmitAction,
+  ConditionOrRef, SimpleCondition, CompositeCondition, ExpressionCondition,
+  ConditionRef, NamedCondition, StaticChoice, ChoiceSource,
+  FieldAnswers, FormErrors, FormContext,
+  FormState, ConfidentialityType, NumberType, AccessLevel, RoleCategory, LayoutType,
+} from "./lib/types";
