@@ -1,0 +1,294 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Sample manifest: job_application
+# Upload this file via the Form Builder to see it in action.
+# ─────────────────────────────────────────────────────────────────────────────
+
+manifest_id: job_application
+manifest_version: "4.0.0"
+
+engine:
+  mode: reactive
+  evaluation_order: dependency
+  error_mode: collect-all
+  debounce_ms: 300
+
+namespaces: [core, schemata, uam, form]
+
+conditions:
+  has_experience:
+    expression: "fields.years_experience > 0"
+  is_remote:
+    condition:
+      field: work_preference
+      op: eq
+      value: remote
+  needs_visa:
+    condition:
+      field: requires_visa
+      op: is_true
+
+forms:
+  job_application:
+    title: Job Application
+    description: |
+      Apply for an open position at our company. We review all applications within 5 business days.
+    version: "1.0.0"
+    form_state: active
+    layout:
+      type: wizard
+    submit_label: Submit Application
+    draft_label: Save & Continue Later
+
+    on_submit:
+      type: rest
+      url: /api/submissions/
+      method: POST
+      success_message: "🎉 Application received! We'll be in touch within 5 days."
+
+    pages:
+      - id: personal
+        title: Personal Info
+        icon: User
+        sections:
+          - id: basic
+            title: Basic Information
+            fields:
+              - id: full_name
+                type: text
+                label: Full Name
+                required: true
+                width: half
+                min_length: 2
+                max_length: 100
+                autocomplete: name
+
+              - id: email
+                type: text
+                label: Email Address
+                required: true
+                width: half
+                autocomplete: email
+                pattern: "^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$"
+                pattern_message: Please enter a valid email address
+
+              - id: phone
+                type: text
+                label: Phone
+                width: half
+                autocomplete: tel
+                placeholder: "+1 (555) 000-0000"
+
+              - id: location
+                type: text
+                label: Current City / Country
+                width: half
+                placeholder: "San Francisco, CA"
+
+              - id: linkedin
+                type: text
+                label: LinkedIn URL
+                placeholder: "https://linkedin.com/in/yourname"
+
+      - id: experience
+        title: Experience
+        icon: Briefcase
+        sections:
+          - id: role
+            title: Role & Experience
+            fields:
+              - id: position_applying
+                type: select
+                label: Position Applying For
+                required: true
+                choices:
+                  - value: swe_senior
+                    label: Senior Software Engineer
+                  - value: swe_staff
+                    label: Staff Engineer
+                  - value: pm
+                    label: Product Manager
+                  - value: design_lead
+                    label: Design Lead
+                  - value: data_analyst
+                    label: Data Analyst
+
+              - id: years_experience
+                type: number
+                label: Years of Experience
+                required: true
+                min: 0
+                max: 50
+                number_type: int
+                display_as: stepper
+                width: half
+
+              - id: current_company
+                type: text
+                label: Current Company
+                width: half
+                placeholder: "Company name or 'Freelance'"
+                condition:
+                  field: years_experience
+                  op: gt
+                  value: 0
+
+              - id: current_title
+                type: text
+                label: Current Title
+                width: half
+                placeholder: "e.g. Senior Engineer"
+                condition:
+                  field: years_experience
+                  op: gt
+                  value: 0
+
+              - id: notice_period
+                type: select
+                label: Notice Period
+                width: half
+                condition:
+                  field: years_experience
+                  op: gt
+                  value: 0
+                choices:
+                  - value: immediate
+                    label: Immediate
+                  - value: 2_weeks
+                    label: 2 Weeks
+                  - value: 1_month
+                    label: 1 Month
+                  - value: 3_months
+                    label: 3 Months
+
+          - id: skills_section
+            title: Skills & Tech
+            fields:
+              - id: skills
+                type: multiselect
+                label: Primary Skills
+                display_as: tag-input
+                allow_others: true
+                max_selected: 15
+                choices:
+                  - value: python
+                    label: Python
+                  - value: typescript
+                    label: TypeScript
+                  - value: react
+                    label: React / Next.js
+                  - value: go
+                    label: Go
+                  - value: rust
+                    label: Rust
+                  - value: java
+                    label: Java / Kotlin
+                  - value: swift
+                    label: Swift / iOS
+                  - value: android
+                    label: Android / Kotlin
+                  - value: devops
+                    label: DevOps / Platform
+                  - value: ml
+                    label: ML / Data Science
+                  - value: sql
+                    label: SQL / Data Engineering
+                  - value: ux
+                    label: UX Research
+                  - value: design
+                    label: Product Design (Figma)
+
+              - id: work_preference
+                type: select
+                label: Work Mode Preference
+                display_as: button-group
+                required: true
+                choices:
+                  - value: office
+                    label: "🏢 In-office"
+                  - value: hybrid
+                    label: "🔀 Hybrid"
+                  - value: remote
+                    label: "🏠 Remote"
+
+              - id: remote_timezone
+                type: text
+                label: Your Timezone
+                width: half
+                placeholder: "e.g. UTC+5:30 / IST"
+                condition:
+                  ref: is_remote
+
+              - id: requires_visa
+                type: boolean
+                label: I require visa sponsorship
+                display_as: checkbox
+
+              - id: visa_country
+                type: text
+                label: Which country requires sponsorship?
+                width: half
+                condition:
+                  ref: needs_visa
+
+      - id: motivation
+        title: Motivation
+        icon: Heart
+        sections:
+          - id: cover
+            title: Cover Letter
+            fields:
+              - id: why_us
+                type: multiline
+                label: Why do you want to join us?
+                required: true
+                rows: 5
+                max_length: 1500
+                placeholder: "Tell us what excites you about this role and our company…"
+
+              - id: biggest_achievement
+                type: multiline
+                label: Describe your biggest professional achievement
+                rows: 4
+                max_length: 1000
+                placeholder: "What impact did you have? What did you learn?"
+
+              - id: salary_expectation
+                type: number
+                label: Expected Annual Salary (USD)
+                prefix: "$"
+                min: 0
+                number_type: decimal2
+                width: half
+                confidentiality: Confidential
+
+              - id: start_date
+                type: date
+                label: Earliest Start Date
+                width: half
+                min_date: today
+
+              - id: portfolio_url
+                type: text
+                label: Portfolio / GitHub / Dribbble URL
+                placeholder: "https://github.com/yourhandle"
+
+              - id: hear_about_us
+                type: select
+                label: How did you hear about us?
+                choices:
+                  - value: linkedin
+                    label: LinkedIn
+                  - value: referral
+                    label: Employee Referral
+                  - value: job_board
+                    label: Job Board
+                  - value: twitter
+                    label: Twitter / X
+                  - value: other
+                    label: Other
+
+              - id: consent
+                type: boolean
+                label: I consent to my data being stored and used for recruitment purposes
+                display_as: checkbox
+                required: true

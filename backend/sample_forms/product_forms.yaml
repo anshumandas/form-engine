@@ -1,0 +1,351 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Sample manifest: product_forms
+# Demonstrates: computed fields, conditional logic, multiple forms in one manifest
+# ─────────────────────────────────────────────────────────────────────────────
+
+manifest_id: product_forms
+manifest_version: "4.0.0"
+
+engine:
+  mode: reactive
+  evaluation_order: dependency
+  error_mode: collect-all
+  debounce_ms: 200
+
+conditions:
+  wants_follow_up:
+    condition:
+      field: overall_rating
+      op: lte
+      value: 3
+
+  is_business:
+    condition:
+      field: account_type
+      op: eq
+      value: business
+
+  has_promo:
+    condition:
+      field: has_promo_code
+      op: is_true
+
+forms:
+  # ── 1. Product Feedback (single-page) ─────────────────────────────────────
+  product_feedback:
+    title: Product Feedback
+    description: Help us improve — your feedback shapes our roadmap.
+    version: "1.0.0"
+    form_state: active
+    layout:
+      type: single-page
+    submit_label: Submit Feedback
+    state:
+      persistence: localStorage
+      auto_save: true
+    on_submit:
+      type: none
+      success_message: "🙏 Thanks for your feedback!"
+
+    sections:
+      - id: experience
+        title: Your Experience
+        fields:
+          - id: overall_rating
+            type: rating
+            label: Overall Rating
+            required: true
+            max: 5
+            display_as: stars
+            low_label: Very Dissatisfied
+            high_label: Very Satisfied
+
+          - id: ease_of_use
+            type: rating
+            label: Ease of Use
+            max: 5
+            display_as: numeric-scale
+
+          - id: value_for_money
+            type: rating
+            label: Value for Money
+            max: 5
+            display_as: numeric-scale
+
+          - id: average_score
+            type: number
+            label: Average Score
+            readonly: true
+            system_generated: false
+            width: half
+            prefix: "⭐ "
+            decimal_places: 1
+            computed:
+              expression: >
+                ((fields.overall_rating || 0) + (fields.ease_of_use || 0) + (fields.value_for_money || 0)) / 3
+
+      - id: details
+        title: Tell Us More
+        fields:
+          - id: what_you_like
+            type: multiline
+            label: What do you like most?
+            rows: 3
+            max_length: 500
+            placeholder: "The feature I find most useful is…"
+
+          - id: improvement_area
+            type: select
+            label: Biggest area for improvement
+            choices:
+              - value: performance
+                label: Performance / Speed
+              - value: ui
+                label: UI / Design
+              - value: features
+                label: Missing Features
+              - value: pricing
+                label: Pricing
+              - value: support
+                label: Customer Support
+              - value: docs
+                label: Documentation
+
+          - id: follow_up_email
+            type: text
+            label: Email for follow-up
+            required: true
+            placeholder: "you@example.com"
+            condition:
+              ref: wants_follow_up
+            pattern: "^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$"
+            hint: "We'll reach out to understand how we can do better."
+
+          - id: recommend_score
+            type: rating
+            label: How likely are you to recommend us?
+            max: 10
+            display_as: numeric-scale
+            low_label: Not likely
+            high_label: Extremely likely
+
+  # ── 2. Order Form (wizard) ──────────────────────────────────────────────────
+  order_form:
+    title: Place an Order
+    description: Complete the form below to place your order. All fields marked * are required.
+    version: "1.0.0"
+    form_state: active
+    layout:
+      type: wizard
+    submit_label: Confirm Order
+    draft_label: Save for Later
+    state:
+      persistence: localStorage
+      auto_save: true
+
+    on_submit:
+      type: rest
+      url: /api/submissions/
+      method: POST
+      success_message: "✅ Order placed! You'll receive a confirmation email shortly."
+
+    pages:
+      - id: order_details
+        title: Order Details
+        icon: ShoppingCart
+        sections:
+          - id: account
+            title: Account Type
+            fields:
+              - id: account_type
+                type: select
+                label: I am ordering as
+                required: true
+                display_as: button-group
+                choices:
+                  - value: individual
+                    label: Individual
+                  - value: business
+                    label: Business
+
+              - id: company_name
+                type: text
+                label: Company Name
+                required: true
+                width: half
+                condition:
+                  ref: is_business
+
+              - id: gst_number
+                type: text
+                label: GST Number
+                width: half
+                placeholder: "22AAAAA0000A1Z5"
+                condition:
+                  ref: is_business
+
+          - id: items
+            title: Items
+            fields:
+              - id: product
+                type: select
+                label: Product
+                required: true
+                choices:
+                  - value: starter
+                    label: Starter Plan — ₹999/mo
+                  - value: pro
+                    label: Pro Plan — ₹2,499/mo
+                  - value: enterprise
+                    label: Enterprise Plan — Custom
+
+              - id: quantity
+                type: number
+                label: Quantity
+                required: true
+                min: 1
+                max: 100
+                number_type: int
+                display_as: stepper
+                default: 1
+                width: half
+
+              - id: unit_price
+                type: number
+                label: Unit Price (₹)
+                readonly: true
+                width: half
+                prefix: "₹"
+                number_type: decimal2
+                computed:
+                  expression: >
+                    fields.product === "starter" ? 999 :
+                    fields.product === "pro" ? 2499 : 0
+
+              - id: subtotal
+                type: number
+                label: Subtotal (₹)
+                readonly: true
+                prefix: "₹"
+                number_type: decimal2
+                computed:
+                  expression: "(fields.unit_price || 0) * (fields.quantity || 0)"
+
+              - id: has_promo_code
+                type: boolean
+                label: I have a promo code
+                display_as: checkbox
+
+              - id: promo_code
+                type: text
+                label: Promo Code
+                width: half
+                placeholder: "SAVE20"
+                condition:
+                  ref: has_promo
+
+      - id: delivery
+        title: Delivery
+        icon: MapPin
+        sections:
+          - id: shipping
+            title: Shipping Address
+            fields:
+              - id: full_name
+                type: text
+                label: Full Name
+                required: true
+                width: half
+                autocomplete: name
+
+              - id: phone
+                type: text
+                label: Phone
+                required: true
+                width: half
+                autocomplete: tel
+
+              - id: address_line1
+                type: text
+                label: Address Line 1
+                required: true
+                autocomplete: address-line1
+
+              - id: address_line2
+                type: text
+                label: Address Line 2
+                autocomplete: address-line2
+
+              - id: city
+                type: text
+                label: City
+                required: true
+                width: "half"
+                autocomplete: address-level2
+
+              - id: pincode
+                type: text
+                label: PIN Code
+                required: true
+                width: "half"
+                pattern: "^[1-9][0-9]{5}$"
+                pattern_message: "Enter a valid 6-digit PIN code"
+
+              - id: state
+                type: select
+                label: State
+                required: true
+                width: half
+                choices:
+                  - { value: MH, label: Maharashtra }
+                  - { value: DL, label: Delhi }
+                  - { value: KA, label: Karnataka }
+                  - { value: TN, label: Tamil Nadu }
+                  - { value: GJ, label: Gujarat }
+                  - { value: RJ, label: Rajasthan }
+                  - { value: UP, label: Uttar Pradesh }
+                  - { value: WB, label: West Bengal }
+                  - { value: other, label: Other }
+
+              - id: delivery_date
+                type: date
+                label: Preferred Delivery Date
+                width: half
+                min_date: "today+2d"
+                max_date: "today+30d"
+                disable_weekends: false
+
+      - id: payment
+        title: Payment
+        icon: CreditCard
+        sections:
+          - id: payment_method
+            title: Payment Method
+            fields:
+              - id: payment_type
+                type: select
+                label: Pay with
+                required: true
+                display_as: radio
+                choices:
+                  - value: upi
+                    label: UPI
+                  - value: card
+                    label: Credit / Debit Card
+                  - value: netbanking
+                    label: Net Banking
+                  - value: cod
+                    label: Cash on Delivery
+
+              - id: order_notes
+                type: multiline
+                label: Order Notes (optional)
+                rows: 3
+                max_length: 300
+                placeholder: "Any special instructions for packing or delivery…"
+
+              - id: accept_terms
+                type: boolean
+                label: I agree to the Terms of Service and Privacy Policy
+                required: true
+                display_as: checkbox

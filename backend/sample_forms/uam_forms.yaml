@@ -1,0 +1,910 @@
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  uam_forms.yaml                                                              ║
+# ║  Form Engine Manifest — UAM Module                                           ║
+# ║                                                                              ║
+# ║  Forms: User · Team · Role · Permission · Feature · Login                   ║
+# ║  Schema reference: 03_uam.yaml                                               ║
+# ║  Spec: form_schema_v5.yaml (v4.0.0)                                          ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+manifest_id: uam_forms
+manifest_version: "1.0.0"
+
+engine:
+  mode: reactive
+  evaluation_order: dependency
+  error_mode: collect-all
+  debounce_ms: 300
+
+namespaces: [core, schemata, uam, form]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SHARED DATA SOURCES
+# ─────────────────────────────────────────────────────────────────────────────
+data_sources:
+
+  users_source:
+    type: rest
+    description: All active users for relationship pickers.
+    endpoint: /api/uam/users
+    value_key: userId
+    label_key: name
+    cache_ttl_seconds: 120
+
+  teams_source:
+    type: rest
+    description: All teams for relationship pickers.
+    endpoint: /api/uam/teams
+    value_key: teamId
+    label_key: name
+    cache_ttl_seconds: 120
+
+  roles_source:
+    type: rest
+    description: All roles for relationship pickers.
+    endpoint: /api/uam/roles
+    value_key: roleName
+    label_key: roleName
+    cache_ttl_seconds: 120
+
+  permissions_source:
+    type: rest
+    description: All permissions for relationship pickers.
+    endpoint: /api/uam/permissions
+    value_key: name
+    label_key: name
+    cache_ttl_seconds: 120
+
+  features_source:
+    type: rest
+    description: All product features for relationship pickers.
+    endpoint: /api/uam/features
+    value_key: name
+    label_key: name
+    cache_ttl_seconds: 300
+
+  schemas_source:
+    type: rest
+    description: All schemata entries for permission scoping.
+    endpoint: /api/schemata/schemas
+    value_key: schemaId
+    label_key: name
+    cache_ttl_seconds: 300
+
+  cities_source:
+    type: rest
+    description: Core city reference list for address picker.
+    endpoint: /api/core/cities
+    value_key: cityId
+    label_key: name
+    cache_ttl_seconds: 3600
+
+  email_suggestions_source:
+    type: rest
+    description: >
+      Autocomplete suggestions for email addresses (existing org addresses).
+      Users may always type a new address via allow_others.
+    endpoint: /api/uam/contacts/email-suggestions
+    value_key: email
+    label_key: email
+    search_param: q
+    cache_ttl_seconds: 60
+
+  phone_suggestions_source:
+    type: rest
+    description: Autocomplete suggestions for phone numbers.
+    endpoint: /api/uam/contacts/phone-suggestions
+    value_key: phone
+    label_key: phone
+    search_param: q
+    cache_ttl_seconds: 60
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SHARED NAMED CONDITIONS
+# ─────────────────────────────────────────────────────────────────────────────
+conditions:
+
+  is_new_record:
+    description: True when creating a new record (no existing ID in context).
+    expression: "!context.recordId"
+
+  has_delegate:
+    description: True when a delegate user has been selected on the User form.
+    expression: "!!fields.delegate_of"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SHARED VALIDATION RULES
+# ─────────────────────────────────────────────────────────────────────────────
+validation:
+  rules:
+    valid_email:
+      type: regex
+      value: "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      message: "Please enter a valid email address."
+
+    valid_phone:
+      type: regex
+      value: "^\\+?[0-9][0-9\\s\\-().]{6,19}$"
+      message: "Please enter a valid phone number."
+
+    no_spaces_in_id:
+      type: regex
+      value: "^\\S+$"
+      message: "Identifier must not contain spaces."
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FORMS
+# ══════════════════════════════════════════════════════════════════════════════
+forms:
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  USER FORM                                                               ║
+  # ║  uam#user — Referrable, confidentiality: Restricted                     ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  user_form:
+    title: "User"
+    description: >
+      Create or edit a user account. Complete all pages to configure the
+      user's identity, login credentials, contact details, profile, and
+      role/team assignments.
+    version: "1.0.0"
+    form_state: active
+    confidentiality: Restricted
+
+    access:
+      feature_ref: uam_user_management
+      allowed_role_categories: [Employee]
+      auth_context_key: auth
+      submit_requires: create
+
+    state:
+      persistence: sessionStorage
+      auto_save: true
+      draft_key: uam_user_draft
+
+    layout:
+      type: wizard
+
+    submit_label: "Save User"
+    draft_label:  "Save Draft"
+
+    pages:
+
+      # ── Page 1: Basic Identity ──────────────────────────────────────────
+      - id: basic_info
+        title: "Basic Information"
+        icon: user
+        sections:
+
+          - id: identity_section
+            title: "Identity"
+            description: "Core identifying fields for this user account."
+            fields:
+
+              - id: user_id
+                type: number
+                label: "User ID"
+                hint: "Auto-assigned by the system on first save."
+                editability: Generated
+                confidentiality: Internal
+                number_type: int
+                signed: false
+                tags:
+                  key_field: "true"
+                  summary_field: "true"
+
+              - id: name
+                type: multiselect
+                label: "Full Name(s)"
+                required: true
+                hint: >
+                  Enter the user's name(s). Type a name and press Enter to add.
+                  Multiple name variants (e.g. legal name + preferred name) are
+                  supported.
+                choices:
+                  source_ref: users_source   # suggestions only; allow_others adds new entries
+                allow_others: true
+                display_as: tag-input
+                confidentiality: Restricted
+                personal_data: true
+                purpose: "User identification and display across the platform."
+
+      # ── Page 2: Login Credentials ───────────────────────────────────────
+      - id: login_page
+        title: "Login Credentials"
+        icon: lock
+        sections:
+
+          - id: login_section
+            title: "Login Details"
+            description: "Authentication credentials. Password is stored hashed and never shown after creation."
+            fields:
+
+              - id: login_id
+                type: text
+                label: "Login ID"
+                required: true
+                placeholder: "e.g. jane.doe or jane@example.com"
+                hint: "Unique login identifier. Cannot be changed after first save."
+                editability: MutableIfNull
+                confidentiality: Internal
+                max_length: 200
+                tags:
+                  key_field: "true"
+
+              - id: password
+                type: text
+                label: "Password"
+                required_if: "!context.recordId"
+                placeholder: "Set initial password"
+                hint: "Minimum 12 characters. Leave blank on edit to keep the existing password."
+                confidentiality: Secret
+                min_length: 12
+                max_length: 128
+                tags:
+                  personal_data: "true"
+
+              - id: last_login
+                type: datetime
+                label: "Last Login"
+                hint: "Automatically recorded by the system."
+                editability: Generated
+                use_current: false
+                date_format: "dd/MM/yyyy"
+
+      # ── Page 3: Contact Details ─────────────────────────────────────────
+      - id: contacts_page
+        title: "Contact Details"
+        icon: mail
+        sections:
+
+          - id: contacts_section
+            title: "Contacts"
+            description: "Email addresses, phone numbers, and city of residence."
+            fields:
+
+              - id: emails
+                type: multiselect
+                label: "Email Addresses"
+                hint: "Type an email address and press Enter to add. At least one is recommended."
+                choices:
+                  source_ref: email_suggestions_source
+                allow_others: true
+                display_as: tag-input
+                personal_data: true
+                purpose: "Contact and notification delivery."
+                confidentiality: Restricted
+                tags:
+                  pattern: Email
+
+              - id: phones
+                type: multiselect
+                label: "Phone Numbers"
+                hint: "Type a phone number and press Enter. Include country code, e.g. +91 98765 43210."
+                choices:
+                  source_ref: phone_suggestions_source
+                allow_others: true
+                display_as: tag-input
+                personal_data: true
+                purpose: "Contact and two-factor authentication."
+                confidentiality: Restricted
+                tags:
+                  pattern: Phone
+
+              - id: address_city
+                type: select
+                label: "City"
+                hint: "Select the user's primary city."
+                choices:
+                  source_ref: cities_source
+                display_as: dropdown
+                confidentiality: Restricted
+                personal_data: true
+                purpose: "Geographic assignment and regional access rules."
+
+      # ── Page 4: Profile ─────────────────────────────────────────────────
+      - id: profiles_page
+        title: "Profile"
+        icon: image
+        sections:
+
+          - id: profile_section
+            title: "Profile Details"
+            description: "Optional display preferences for this user."
+            fields:
+
+              - id: nick_name
+                type: text
+                label: "Nickname"
+                placeholder: "Optional display name"
+                hint: "How this user prefers to be addressed in the UI."
+                max_length: 80
+
+              - id: photo
+                type: file
+                label: "Profile Photo"
+                hint: "Upload a square image, max 5 MB. JPEG or PNG recommended."
+                accept: "image/jpeg,image/png,image/webp"
+                max_size_mb: 5
+                max_files: 1
+                storage: base64
+
+      # ── Page 5: Roles & Teams ───────────────────────────────────────────
+      - id: roles_teams_page
+        title: "Roles & Teams"
+        icon: users
+        sections:
+
+          - id: roles_section
+            title: "Role Assignments"
+            description: "Roles granted to this user. Roles determine permissions and access levels."
+            fields:
+
+              - id: roles
+                type: multiselect
+                label: "Roles"
+                hint: "Select one or more roles."
+                choices:
+                  source_ref: roles_source
+                display_as: dropdown
+                tags:
+                  relationship: roles
+
+          - id: teams_section
+            title: "Team Memberships"
+            description: "Teams this user is a member of."
+            fields:
+
+              - id: member_of
+                type: multiselect
+                label: "Member Of"
+                hint: "Select the teams this user belongs to."
+                choices:
+                  source_ref: teams_source
+                display_as: dropdown
+                tags:
+                  relationship: memberOf
+
+          - id: delegate_section
+            title: "Delegation"
+            description: "If this user acts as a delegate for another user, select that user here."
+            fields:
+
+              - id: delegate_of
+                type: select
+                label: "Delegate Of"
+                hint: "The user whose permissions this account can exercise on their behalf."
+                choices:
+                  source_ref: users_source
+                display_as: dropdown
+                tags:
+                  relationship: delegateOf
+
+    on_submit:
+      type: rest
+      url: /api/uam/users
+      method: POST
+      success_message: "User saved successfully."
+      error_message: "Failed to save user. Please try again."
+
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  TEAM FORM                                                               ║
+  # ║  uam#team — Referrable, confidentiality: Internal (derived)             ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  team_form:
+    title: "Team"
+    description: >
+      Create or edit a team. Assign members, define sub-teams, and link roles.
+    version: "1.0.0"
+    form_state: active
+    confidentiality: Internal
+
+    access:
+      feature_ref: uam_team_management
+      allowed_role_categories: [Employee]
+      submit_requires: create
+
+    layout:
+      type: single-page
+
+    submit_label: "Save Team"
+    draft_label:  "Save Draft"
+
+    sections:
+
+      - id: team_details
+        title: "Team Details"
+        fields:
+
+          - id: team_id
+            type: number
+            label: "Team ID"
+            hint: "Auto-assigned by the system."
+            editability: Generated
+            confidentiality: Internal
+            number_type: int
+            signed: false
+            tags:
+              key_field: "true"
+              summary_field: "true"
+
+          - id: name
+            type: text
+            label: "Team Name"
+            required: true
+            placeholder: "e.g. Product Engineering"
+            max_length: 200
+
+          - id: purpose
+            type: multiline
+            label: "Purpose"
+            placeholder: "Describe the team's mission or scope."
+            rows: 3
+            max_length: 1000
+
+      - id: team_members
+        title: "Members"
+        description: "Users who are direct members of this team."
+        fields:
+
+          - id: members
+            type: multiselect
+            label: "Members"
+            hint: "Search and select users to add as members."
+            choices:
+              source_ref: users_source
+            display_as: dropdown
+            tags:
+              relationship: members
+
+      - id: sub_teams_section
+        title: "Sub-Teams"
+        description: "Teams that report under or are part of this team."
+        fields:
+
+          - id: sub_teams
+            type: multiselect
+            label: "Sub-Teams"
+            hint: "Select child teams to nest under this team."
+            choices:
+              source_ref: teams_source
+            display_as: dropdown
+            tags:
+              relationship: subTeams
+
+      - id: team_roles_section
+        title: "Roles"
+        description: "Roles scoped to and managed by this team."
+        fields:
+
+          - id: roles
+            type: multiselect
+            label: "Team Roles"
+            hint: "Roles associated with this team. Team members may be assigned any of these roles."
+            choices:
+              source_ref: roles_source
+            display_as: dropdown
+            tags:
+              relationship: roles
+
+    on_submit:
+      type: rest
+      url: /api/uam/teams
+      method: POST
+      success_message: "Team saved successfully."
+      error_message: "Failed to save team. Please try again."
+
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  ROLE FORM                                                               ║
+  # ║  uam#role — Referrable, confidentiality: Internal (derived)             ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  role_form:
+    title: "Role"
+    description: >
+      Define a role with its category, permission grants, sub-role hierarchy,
+      and optional key-value filters and preferences.
+    version: "1.0.0"
+    form_state: active
+    confidentiality: Internal
+
+    access:
+      feature_ref: uam_role_management
+      allowed_role_categories: [Employee]
+      submit_requires: create
+
+    layout:
+      type: single-page
+
+    submit_label: "Save Role"
+    draft_label:  "Save Draft"
+
+    sections:
+
+      - id: role_details
+        title: "Role Details"
+        fields:
+
+          - id: role_name
+            type: text
+            label: "Role Name"
+            required: true
+            placeholder: "e.g. sales_manager"
+            hint: "Unique identifier for this role. Cannot be changed after first save."
+            editability: MutableIfNull
+            confidentiality: Internal
+            max_length: 100
+            tags:
+              key_field: "true"
+              summary_field: "true"
+
+          - id: category
+            type: select
+            label: "Role Category"
+            hint: "Broad classification that controls which form access rules apply."
+            choices:
+              static:
+                - { value: Customer,   label: "Customer"   }
+                - { value: Employee,   label: "Employee"   }
+                - { value: Partner,    label: "Partner"    }
+                - { value: Contractor, label: "Contractor" }
+                - { value: Automaton,  label: "Automaton"  }
+            display_as: dropdown
+
+      - id: role_permissions_section
+        title: "Permissions"
+        description: >
+          Permissions granted by this role. Each permission may carry additional
+          action flags (e.g. read, create, update) configured in the Permission form.
+        fields:
+
+          - id: permissions
+            type: multiselect
+            label: "Permissions"
+            hint: "Select the permissions this role grants to its holders."
+            choices:
+              source_ref: permissions_source
+            display_as: dropdown
+            tags:
+              relationship: permissions
+
+          - id: permission_actions
+            type: json
+            label: "Per-Permission Action Overrides"
+            hint: >
+              Optional JSON map of { "permissionName": ["read","create",...] } to
+              override the default action set for a specific permission within this role.
+              Leave blank to accept the permission's own defaults.
+            rows: 6
+            tags:
+              relationship_additional_fields: "true"
+
+      - id: role_hierarchy
+        title: "Sub-Roles"
+        description: "Roles that are subordinate to this role in the hierarchy."
+        fields:
+
+          - id: sub_role
+            type: multiselect
+            label: "Sub-Roles"
+            hint: "Roles whose permissions are automatically included in this role."
+            choices:
+              source_ref: roles_source
+            display_as: dropdown
+            tags:
+              relationship: subRole
+
+      - id: role_overrides
+        title: "Filters & Preferences"
+        description: >
+          Key-value overrides applied when this role is active. Filters restrict
+          which records are visible; preferences adjust UI behaviour.
+        fields:
+
+          - id: filters
+            type: json
+            label: "Filters"
+            hint: >
+              JSON object of { "fieldName": "value" } pairs applied as automatic
+              WHERE clauses on all queries made under this role.
+              Example: { "region": "APAC", "status": "active" }
+            rows: 5
+            tags:
+              container_type: Map
+
+          - id: preferences
+            type: json
+            label: "Preferences"
+            hint: >
+              JSON object of UI / behaviour preferences for holders of this role.
+              Example: { "defaultDashboard": "sales", "locale": "en-IN" }
+            rows: 5
+            tags:
+              container_type: Map
+
+    on_submit:
+      type: rest
+      url: /api/uam/roles
+      method: POST
+      success_message: "Role saved successfully."
+      error_message: "Failed to save role. Please try again."
+
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  PERMISSION FORM                                                         ║
+  # ║  uam#permission — Referrable, confidentiality: Internal (derived)       ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  permission_form:
+    title: "Permission"
+    description: >
+      Define a named permission. Specify its access-level scope, the subset of
+      fields it exposes, any record-level filters, and which schemas or features it gates.
+    version: "1.0.0"
+    form_state: active
+    confidentiality: Internal
+
+    access:
+      feature_ref: uam_permission_management
+      allowed_role_categories: [Employee]
+      submit_requires: create
+
+    layout:
+      type: single-page
+
+    submit_label: "Save Permission"
+    draft_label:  "Save Draft"
+
+    sections:
+
+      - id: permission_details
+        title: "Permission Details"
+        fields:
+
+          - id: name
+            type: text
+            label: "Permission Name"
+            required: true
+            placeholder: "e.g. view_invoices"
+            hint: "Unique identifier. Cannot be changed after first save."
+            editability: MutableIfNull
+            max_length: 100
+            tags:
+              key_field: "true"
+              summary_field: "true"
+
+          - id: access_level
+            type: select
+            label: "Access Level"
+            hint: >
+              Controls the data-ownership scope this permission covers.
+              Self = own records only · Delegated = delegated records ·
+              Team = team records · Reportee = direct reports ·
+              Category = all records in the same role category.
+            choices:
+              static:
+                - { value: Self,      label: "Self — own records only"       }
+                - { value: Delegated, label: "Delegated — delegated records" }
+                - { value: Team,      label: "Team — team-scoped records"    }
+                - { value: Reportee,  label: "Reportee — direct reports"     }
+                - { value: Category,  label: "Category — full category"      }
+            display_as: dropdown
+
+      - id: field_scope_section
+        title: "Field Scope"
+        description: >
+          Optionally restrict which fields of the target schema(s) are visible
+          under this permission. Leave empty to allow all fields.
+        fields:
+
+          - id: fields
+            type: multiselect
+            label: "Restricted Field IDs"
+            hint: >
+              Type or select field IDs. When non-empty, only these fields are
+              rendered and submitted for holders of this permission.
+            choices:
+              source_ref: schemas_source
+            allow_others: true
+            display_as: tag-input
+            tags:
+              container_type: Set
+
+      - id: filters_section
+        title: "Record Filters"
+        description: >
+          Automatic WHERE-clause filters applied to every query made under
+          this permission. Merged with any role-level filters.
+        fields:
+
+          - id: filters
+            type: json
+            label: "Filters"
+            hint: >
+              JSON object of { "fieldName": "value" } pairs.
+              Example: { "status": "active", "country": "IN" }
+            rows: 5
+            tags:
+              container_type: Map
+
+      - id: linked_schemas_section
+        title: "Linked Schemas"
+        description: "The data schemas this permission grants access to."
+        fields:
+
+          - id: schema
+            type: multiselect
+            label: "Schemas"
+            hint: "Select the schema(s) from the schemata namespace that this permission applies to."
+            choices:
+              source_ref: schemas_source
+            display_as: dropdown
+            tags:
+              relationship: schema
+
+      - id: linked_features_section
+        title: "Linked Features"
+        description: "Product features gated by this permission."
+        fields:
+
+          - id: features
+            type: multiselect
+            label: "Features"
+            hint: "Select features that require this permission to be present."
+            choices:
+              source_ref: features_source
+            display_as: dropdown
+            tags:
+              relationship: features
+
+    on_submit:
+      type: rest
+      url: /api/uam/permissions
+      method: POST
+      success_message: "Permission saved successfully."
+      error_message: "Failed to save permission. Please try again."
+
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  FEATURE FORM                                                            ║
+  # ║  uam#feature — Referrable, confidentiality: Public                      ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  feature_form:
+    title: "Feature"
+    description: >
+      Register a named product feature. Features are referenced by permissions
+      to gate access to specific product capabilities.
+    version: "1.0.0"
+    form_state: active
+    confidentiality: Public
+
+    access:
+      feature_ref: uam_feature_management
+      allowed_role_categories: [Employee]
+      submit_requires: create
+
+    layout:
+      type: single-page
+
+    submit_label: "Save Feature"
+
+    sections:
+
+      - id: feature_details
+        title: "Feature Details"
+        description: >
+          A feature is a logical identifier for a product capability.
+          It can be linked to one or more screens (ux#Screen) and schemas (schemata#Schema).
+        fields:
+
+          - id: name
+            type: text
+            label: "Feature Name"
+            required: true
+            placeholder: "e.g. invoice_export"
+            hint: >
+              Unique machine-readable identifier for this feature.
+              Used in permission references and feature gate checks.
+              Cannot be changed after first save.
+            editability: MutableIfNull
+            max_length: 100
+            tags:
+              key_field: "true"
+              summary_field: "true"
+
+    on_submit:
+      type: rest
+      url: /api/uam/features
+      method: POST
+      success_message: "Feature registered successfully."
+      error_message: "Failed to save feature. Please try again."
+
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  LOGIN FORM                                                              ║
+  # ║  uam#login — Referrable, confidentiality: Restricted / Secret           ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  login_form:
+    title: "Login"
+    description: >
+      Manage login credentials for a user account.
+      The Login ID is immutable after creation. Previous passwords are system-managed.
+    version: "1.0.0"
+    form_state: active
+    confidentiality: Restricted
+
+    access:
+      feature_ref: uam_login_management
+      allowed_role_categories: [Employee]
+      submit_requires: update
+
+    layout:
+      type: single-page
+
+    submit_label: "Update Login"
+
+    sections:
+
+      - id: login_credentials
+        title: "Credentials"
+        fields:
+
+          - id: login_id
+            type: text
+            label: "Login ID"
+            required: true
+            placeholder: "Login identifier"
+            hint: "This value is set at creation and cannot be changed."
+            editability: Immutable
+            confidentiality: Internal
+            max_length: 200
+            tags:
+              key_field: "true"
+              summary_field: "true"
+
+          - id: password
+            type: text
+            label: "New Password"
+            placeholder: "Enter new password to change"
+            hint: >
+              Minimum 12 characters. Leave blank to keep the current password.
+              The previous password will be added to the history automatically.
+            confidentiality: Secret
+            min_length: 12
+            max_length: 128
+            tags:
+              personal_data: "true"
+
+      - id: login_meta
+        title: "Audit Information"
+        description: "Read-only login activity fields maintained by the system."
+        fields:
+
+          - id: last_login
+            type: datetime
+            label: "Last Login"
+            hint: "Automatically updated by the authentication service."
+            editability: Generated
+            readonly: true
+            date_format: "dd/MM/yyyy"
+            use_current: false
+
+          - id: last_pwds
+            type: json
+            label: "Password History"
+            hint: "Hashed previous passwords retained for reuse policy enforcement. System-managed."
+            editability: Generated
+            readonly: true
+            confidentiality: Secret
+            rows: 3
+            tags:
+              container_type: List
+              personal_data: "true"
+
+    on_submit:
+      type: rest
+      url: /api/uam/logins/{{context.loginId}}
+      method: PUT
+      success_message: "Login updated successfully."
+      error_message: "Failed to update login. Please try again."
