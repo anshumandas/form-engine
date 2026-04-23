@@ -1,16 +1,16 @@
 "use client";
 
 import React, { useState } from "react";
-import type { Section, Collection, FormField } from "@/lib/types";
-import { useFormEngineStore } from "@/store/form-engine-store";
-import { cn } from "@/lib/utils";
+import type { Section, Collection, FormField } from "../../libs/types";
+import { useFormEngineStore } from "../../store/form-engine-store";
+import { cn } from "../../libs/utils";
 import {
   TextFieldRenderer, MultilineFieldRenderer, BooleanFieldRenderer,
   NumberFieldRenderer, SelectFieldRenderer, MultiselectFieldRenderer,
   DateFieldRenderer, RatingFieldRenderer, FileFieldRenderer,
   ColorFieldRenderer, FieldWrapper,
 } from "./fields/FieldRenderers";
-import { evaluateCondition } from "@/lib/condition-evaluator";
+import { evaluateCondition } from "../../libs/condition-evaluator";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 interface CollectionRendererProps {
@@ -230,7 +230,7 @@ function ScopedField({ field, value, allValues, onChange }: {
 
   const handleBlur = () => setTouched(true);
   const props = { field, value, onChange, onBlur: handleBlur, errors };
-  const type = (field as Record<string, unknown>).type as string;
+  const type = (field as unknown as Record<string, unknown>).type as string;
 
   switch (type) {
     case "text":        return <TextFieldRenderer       {...props} field={field as any} />;

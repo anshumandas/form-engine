@@ -11,7 +11,7 @@ import { FormErrorBoundary } from "./FormErrorBoundary";
 import { FormEngine as FormEngineInner, FieldRouter } from "./index";
 export { FieldRouter };
 
-import type { FormManifest, FieldAnswers, FormContext, FormSubmissionResponse } from "@/lib/types";
+import type { FormManifest, FieldAnswers, FormContext, FormSubmissionResponse } from "/libs/types";
 
 interface SafeFormEngineProps {
   manifest: FormManifest;

@@ -5,8 +5,8 @@ import type {
   FormField, TextField, MultilineField, BooleanField, NumberField,
   SelectField, MultiselectField, DateField, RatingField, FileField,
   StaticChoice,
-} from "@/lib/types";
-import { cn } from "@/lib/utils";
+} from "../../../libs/types";
+import { cn } from "../../../libs/utils";
 
 // ─── Shared Field Wrapper ─────────────────────────────────────────────────────
 interface FieldWrapperProps {

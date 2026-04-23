@@ -5,9 +5,9 @@ from fastapi import APIRouter, HTTPException
 from typing import Dict, List, Any, Optional
 import uuid, datetime
 
-from models.form_schema import FormSubmission, FormSubmissionResponse, ValidationRule
-from services.condition_evaluator import evaluate_condition, filter_visible_fields
-from routers.forms import _manifests
+from ..models.form_schema import FormSubmission, FormSubmissionResponse, ValidationRule
+from ..services.condition_evaluator import evaluate_condition, filter_visible_fields
+from .forms import _manifests
 
 router = APIRouter(prefix="/api/submissions", tags=["submissions"])
 

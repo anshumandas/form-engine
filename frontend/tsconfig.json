@@ -1,5 +1,7 @@
 {
   "compilerOptions": {
+    "target": "es2019",
+    "forceConsistentCasingInFileNames": true,
     "lib": [
       "dom",
       "dom.iterable",
@@ -7,7 +9,6 @@
     ],
     "allowJs": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
     "strict": true,
     "noEmit": true,
     "esModuleInterop": true,
@@ -15,7 +16,7 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "incremental": true,
     "plugins": [
       {
@@ -23,17 +24,20 @@
       }
     ],
     "paths": {
+      "@form-engine/*": [
+        "../lib/src/*"
+      ],
       "@/*": [
         "./src/*"
       ]
-    },
-    "target": "ES2017"
+    }
   },
   "include": [
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
+    "../lib/src/libs/api.ts",
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [

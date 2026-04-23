@@ -2,10 +2,10 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { api } from "@/lib/api";
-import { categoryApi, type CategorySummary } from "@/lib/api";
-import type { ManifestSummary } from "@/lib/types";
-import { formatDate, cn } from "@/lib/utils";
+import { api } from "@form-engine/libs/api";
+import { categoryApi, type CategorySummary } from "@form-engine/libs/api";
+import type { ManifestSummary } from "@form-engine/libs/types";
+import { formatDate, cn } from "@form-engine/libs/utils";
 import { toast } from "sonner";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -364,6 +364,7 @@ export default function HomePage() {
               New Category
             </button>
             <Link href="/create" className="btn-secondary text-sm">⚡ Form Builder</Link>
+            <Link href="/chat" className="btn-secondary text-sm">💬 AI Chat</Link>
             <label className="btn-secondary text-sm cursor-pointer">
               {uploading ? (
                 <span className="flex items-center gap-1.5">

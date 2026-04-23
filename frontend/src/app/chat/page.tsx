@@ -3,10 +3,10 @@
 import React, { useState, useRef, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { api } from "@/lib/api";
-import { FormEngine } from "@/components/FormEngine";
-import type { FormManifest, FieldAnswers } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { api } from "@form-engine/libs/api";
+import { FormEngine } from "@form-engine/components/FormEngine";
+import type { FormManifest, FieldAnswers } from "@form-engine/libs/types";
+import { cn } from "@form-engine/libs/utils";
 import { toast } from "sonner";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -47,7 +47,7 @@ Today's date: ${new Date().toISOString().split("T")[0]}.`;
     const form = manifest.forms?.[formId];
     const fields = (form?.pages ?? []).flatMap(p => p.sections.flatMap(s => s.fields ?? []))
       .concat((form?.sections ?? []).flatMap(s => s.fields ?? []));
-    const fieldList = fields.map(f => `- ${f.id}: ${(f as Record<string,unknown>).label ?? f.id} (${(f as Record<string,unknown>).type}${(f as Record<string,unknown>).required ? ", required" : ""})`).join("\n");
+    const fieldList = fields.map(f => `- ${f.id}: ${(f as unknown as Record<string,unknown>).label ?? f.id} (${(f as unknown as Record<string,unknown>).type}${(f as unknown as Record<string,unknown>).required ? ", required" : ""})`).join("\n");
     const currentAnswers = JSON.stringify(answers, null, 2);
     return `${base}
 You are helping the user fill out the form: "${form?.title ?? formId}".
@@ -231,8 +231,8 @@ function ChatPageInner() {
       }
       if (parsed.action === "loadYaml" && parsed.yaml) {
         try {
-          const { load } = await import("yaml");
-          const m = load(parsed.yaml) as FormManifest;
+          const { parse } = await import("yaml");
+          const m = parse(parsed.yaml) as FormManifest;
           const fids = Object.keys(m.forms ?? {});
           setPanelManifest(m);
           setPanelFid(fids[0] ?? "");
@@ -434,7 +434,7 @@ function ChatPageInner() {
                     manifest={panelManifest}
                     formId={panelFid}
                     initialAnswers={mode === "fill" ? answers : undefined}
-                    onSubmit={async (payload) => {
+                    onSubmit={async (payload: {}) => {
                       if (mode === "fill") {
                         toast.success("Form submitted via panel!");
                       }

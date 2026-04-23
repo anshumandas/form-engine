@@ -1,1 +1,1 @@
-export { FormErrorBoundary } from "../../../../frontend/src/components/FormEngine/FormErrorBoundary";
+export { FormErrorBoundary } from "./FormErrorBoundaryx";

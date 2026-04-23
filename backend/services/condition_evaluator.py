@@ -3,7 +3,7 @@ Server-side condition evaluator for form visibility, branching, and cross-field 
 Mirrors the client-side evaluator in the Next.js frontend.
 """
 from typing import Any, Dict, Optional
-from models.form_schema import (
+from ..models.form_schema import (
     ConditionOrRef, SimpleCondition, CompositeCondition,
     ExpressionCondition, ConditionRef, NamedCondition
 )
@@ -13,7 +13,7 @@ import re
 def _get_field_value(fields: Dict[str, Any], field_id: str) -> Any:
     """Resolve dot-notation paths from field answers."""
     parts = field_id.split(".")
-    current = fields
+    current: Any = fields
     for part in parts:
         if isinstance(current, dict):
             current = current.get(part)

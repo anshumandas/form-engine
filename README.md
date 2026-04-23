@@ -98,6 +98,14 @@ npm run dev
 
 Frontend available at http://localhost:3000
 
+> Local dev note: if you are running the frontend with `npm run dev`, ensure `frontend/.env.local` contains:
+>
+> ```env
+> NEXT_PUBLIC_API_URL=http://localhost:8000
+> ```
+>
+> This keeps the Next.js rewrite proxy targeting the local FastAPI backend.
+
 ---
 
 ## Features

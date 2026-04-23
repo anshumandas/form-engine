@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from typing import Optional
 import datetime, re
 
-from routers.forms import _manifests, _meta
+from .forms import _manifests, _meta
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
 

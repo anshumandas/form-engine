@@ -5,10 +5,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn, json
 
-from routers.forms import router as forms_router, _manifests, _meta
-from routers.submissions import router as submissions_router
-from routers.create_form import router as create_form_router
-from routers.categories import router as categories_router
+from .routers.forms import router as forms_router, _manifests, _meta
+from .routers.submissions import router as submissions_router
+from .routers.create_form import router as create_form_router
+from .routers.categories import router as categories_router
+from .routers.ai_chat import router as ai_router
+from .middleware.security import SecurityHeadersMiddleware, RequestSizeLimitMiddleware
 import datetime
 
 app = FastAPI(
@@ -19,9 +21,12 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+app.add_middleware(RequestSizeLimitMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://web:3000"],
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -31,6 +36,7 @@ app.include_router(forms_router)
 app.include_router(submissions_router)
 app.include_router(create_form_router)
 app.include_router(categories_router)
+app.include_router(ai_router)
 
 
 @app.get("/health")
@@ -279,7 +285,7 @@ async def seed_sample_files():
         try:
             import yaml as _yaml
             body = _yaml.safe_load(f.read_text(encoding="utf-8"))
-            from models.form_schema import FormManifest as FM
+            from .models.form_schema import FormManifest as FM
             m = FM.model_validate(body)
             mid = m.manifest_id or f.stem
             if mid in _manifests:

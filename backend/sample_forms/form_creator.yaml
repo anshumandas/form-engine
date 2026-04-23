@@ -94,7 +94,7 @@ forms:
 
               - id: manifest_id
                 type: text
-                label: "Manifest ID"
+                label: "Category"
                 required: true
                 width: half
                 placeholder: "e.g. my_app_forms"

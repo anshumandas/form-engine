@@ -54,6 +54,6 @@ async function _parseText(
     return JSON.parse(text) as FormManifest;
   }
   // Dynamic import keeps yaml out of the critical bundle for JSON-only users
-  const { load } = await import("yaml");
-  return load(text) as FormManifest;
+  const loadYaml = await import("yaml");
+  return loadYaml.parse(text) as FormManifest;
 }

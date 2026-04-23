@@ -5,24 +5,44 @@ import type {
   FormSubmissionResponse,
 } from "./types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
+// Use relative paths so all requests go through the Next.js rewrite proxy
+// (/api/* → NEXT_PUBLIC_API_URL/api/*). Works in dev and Docker.
 async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...options.headers },
-    ...options,
-  });
+  try {
+    const res = await fetch(path, {
+      headers: { "Content-Type": "application/json", ...options.headers },
+      ...options,
+    });
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Unknown error" }));
-    throw new Error(err.detail || `HTTP ${res.status}`);
+    if (!res.ok) {
+      let errMsg = `HTTP ${res.status}`;
+      try {
+        const err = await res.json();
+        errMsg = err.detail || err.message || errMsg;
+      } catch {
+        try {
+          errMsg = await res.text();
+        } catch {}
+      }
+      throw new Error(errMsg);
+    }
+
+    if (res.status === 204) return undefined as T;
+    return res.json() as Promise<T>;
+  } catch (err: unknown) {
+    if (err instanceof TypeError) {
+      // Network error or CORS issue
+      const msg = err.message.includes('fetch') 
+        ? 'Network error. Is the backend running?'
+        : err.message;
+      console.error('[API Request Error]', path, err);
+      throw new Error(msg);
+    }
+    throw err;
   }
-
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
 }
 
 export interface CategorySummary {
@@ -79,7 +99,7 @@ export const api = {
   uploadManifest: async (file: File): Promise<{ manifest_id: string; forms: string[] }> => {
     const formData = new FormData();
     formData.append("file", file);
-    const res = await fetch(`${API_BASE}/api/forms/upload`, {
+    const res = await fetch("/api/forms/upload", {
       method: "POST",
       body: formData,
     });

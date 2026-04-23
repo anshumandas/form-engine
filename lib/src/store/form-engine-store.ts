@@ -3,8 +3,8 @@ import { persist } from "zustand/middleware";
 import type {
   FormManifest, FormDef, FieldAnswers, FormErrors,
   FormContext, Page, Section, FormField, ConditionOrRef,
-} from "@/lib/types";
-import { evaluateCondition, evaluateComputed, validateField } from "@/lib/condition-evaluator";
+} from "../libs/types";
+import { evaluateCondition, evaluateComputed, validateField } from "../libs/condition-evaluator";
 
 interface FormEngineState {
   manifest: FormManifest | null;
@@ -62,7 +62,7 @@ export const useFormEngineStore = create<FormEngineState>()(
           for (const field of allFields) {
             if (field.id in answers) continue;
             if (field.default !== undefined) answers[field.id] = field.default;
-            const f = field as Record<string, unknown>;
+            const f = field as unknown as Record<string, unknown>;
             if (f.use_current) {
               if (f.type === "date") answers[field.id] = new Date().toISOString().split("T")[0];
               if (f.type === "datetime") answers[field.id] = new Date().toISOString();

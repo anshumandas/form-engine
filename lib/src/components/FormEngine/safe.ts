@@ -1,1 +1,1 @@
-export { SafeFormEngine, FormEngine } from "../../../../frontend/src/components/FormEngine/safe";
+export { SafeFormEngine, FormEngine } from "./safex";

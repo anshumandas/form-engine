@@ -4,7 +4,7 @@ Forms CRUD router — stores manifests in SQLite via SQLAlchemy.
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from typing import Dict, List, Any, Optional
 import json, yaml, uuid, datetime
-from models.form_schema import FormManifest, CreateFormRequest
+from ..models.form_schema import FormManifest, CreateFormRequest
 
 router = APIRouter(prefix="/api/forms", tags=["forms"])
 

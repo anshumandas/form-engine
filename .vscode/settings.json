@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^python -c \"import urllib\\.request, json; print\\(urllib\\.request\\.urlopen\\('http://127\\.0\\.0\\.1:8000/api/forms/'\\)\\.read\\(\\)\\.decode\\(\\)\\)\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

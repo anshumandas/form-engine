@@ -3,9 +3,9 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { api } from "@/lib/api";
-import { FormEngine } from "@/components/FormEngine";
-import type { FormManifest, FieldAnswers } from "@/lib/types";
+import { api } from "@form-engine/libs/api";
+import { FormEngine } from "@form-engine/components/FormEngine";
+import type { FormManifest, FieldAnswers, FormSubmissionResponse } from "@form-engine/libs/types";
 import { toast } from "sonner";
 
 export default function FormPage() {
@@ -94,10 +94,10 @@ export default function FormPage() {
           manifest={manifest}
           formId={formId}
           initialAnswers={initialAnswers}
-          onSubmit={async (payload, response) => {
+          onSubmit={async (payload: FieldAnswers, response?: FormSubmissionResponse) => {
             if (response?.submission_id) {
-              toast.success(response.message ?? "Submitted!", {
-                description: `Submission ID: ${response.submission_id}`,
+              toast.success("Submitted!", {
+                description: `Submission ID: ${response.submission_id}${response.message ? ` - ${response.message}` : ""}`,
               });
             }
           }}

@@ -13,8 +13,10 @@ export { SafeFormEngine }          from "./components/FormEngine/safe";
 export { FormErrorBoundary }       from "./components/FormEngine/FormErrorBoundary";
 export { useFormEngine, useFormEngineInit } from "./hooks/useFormEngine";
 export { useFormEngineStore }              from "./store/form-engine-store";
-export { loadManifest }                    from "./lib/manifest-loader";
-export { evaluateCondition, evaluateComputed, validateField } from "./lib/condition-evaluator";
+export { loadManifest }                    from "./libs/manifest-loader";
+export { evaluateCondition, evaluateComputed, validateField } from "./libs/condition-evaluator";
+export { cn, formatDate, debounce } from "./libs/utils";
+export { api, categoryApi, type CategorySummary } from "./libs/api";
 export type {
   FormManifest, FormDef, FormLayout, FormField, FieldBase,
   TextField, MultilineField, RichTextField, BooleanField, NumberField,
@@ -26,4 +28,4 @@ export type {
   ConditionRef, NamedCondition, StaticChoice, ChoiceSource,
   FieldAnswers, FormErrors, FormContext,
   FormState, ConfidentialityType, NumberType, AccessLevel, RoleCategory, LayoutType,
-} from "./lib/types";
+} from "./libs/types";

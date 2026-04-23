@@ -1,5 +1,6 @@
 """Security middleware — SAST/OWASP compliance."""
 import re
+from urllib import response
 from fastapi import Request
 from fastapi.responses import Response
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -14,7 +15,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-XSS-Protection"]        = "1; mode=block"
         response.headers["Referrer-Policy"]         = "strict-origin-when-cross-origin"
         response.headers["Cache-Control"]           = "no-store, no-cache"
-        response.headers.pop("server", None)
+        if "server" in response.headers:
+            del response.headers["server"]
         return response
 
 class RequestSizeLimitMiddleware(BaseHTTPMiddleware):

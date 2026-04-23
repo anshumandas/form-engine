@@ -3,10 +3,10 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { api } from "@/lib/api";
-import { FormEngine } from "@/components/FormEngine";
-import { FormErrorBoundary } from "@/components/FormEngine/FormErrorBoundary";
-import type { FormManifest, FieldAnswers } from "@/lib/types";
+import { api } from "@form-engine/libs/api";
+import { FormEngine } from "@form-engine/components/FormEngine";
+import { FormErrorBoundary } from "@form-engine/components/FormEngine/FormErrorBoundary";
+import type { FormManifest, FieldAnswers } from "@form-engine/libs/types";
 import { toast } from "sonner";
 
 export default function CreateFormPage() {
@@ -47,6 +47,12 @@ export default function CreateFormPage() {
       toast.error("Network error — could not reach the server");
     }
   };
+
+  const handleDraftSave = async (answers: FieldAnswers) => {
+    //TODO: Implement draft saving for the create form. This is a bit tricky since the form doesn't exist yet and we don't have a form_id to associate the draft with. One option is to save the draft in localStorage with a temporary ID, and then clear it on successful submission. For now, we'll just show a success toast without actually saving.
+    toast.success("Draft saved");
+    throw new Error("Function not implemented.");
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
@@ -114,7 +120,7 @@ export default function CreateFormPage() {
                 manifest={manifest}
                 formId="create_form"
                 onSubmit={handleSubmit}
-                onDraftSave={async () => toast.success("Draft saved")}
+                onDraftSave={handleDraftSave}
               />
             </FormErrorBoundary>
           </div>

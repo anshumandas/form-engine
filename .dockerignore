@@ -1,0 +1,22 @@
+# Ignore everything by default; only what's needed is included.
+
+# Node / Next.js build artefacts
+frontend/node_modules
+frontend/.next
+frontend/.turbo
+frontend/out
+
+# Python caches
+backend/__pycache__
+backend/*.pyc
+backend/.pytest_cache
+
+# Lib build output (only src/ is needed, not dist/)
+lib/dist
+lib/node_modules
+
+# Editor / OS noise
+.DS_Store
+*.log
+.git
+.gitignore

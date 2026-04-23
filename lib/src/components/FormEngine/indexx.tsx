@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useEffect } from "react";
-import type { FormManifest, FormDef, FormField, FieldAnswers, FormContext } from "@/lib/types";
-import { useFormEngineStore } from "@/store/form-engine-store";
+import type { FormManifest, FormDef, FormField, FieldAnswers, FormContext } from "../../libs/types";
+import { useFormEngineStore } from "../../store/form-engine-store";
 import {
   TextFieldRenderer, MultilineFieldRenderer, BooleanFieldRenderer,
   NumberFieldRenderer, SelectFieldRenderer, MultiselectFieldRenderer,
@@ -11,7 +11,7 @@ import {
 } from "./fields/FieldRenderers";
 import { WizardLayout } from "./layouts/WizardLayout";
 import { SinglePageLayout } from "./layouts/SinglePageLayout";
-import type { FormSubmissionResponse } from "@/lib/types";
+import type { FormSubmissionResponse } from "../../libs/types";
 
 interface FormEngineProps {
   manifest: FormManifest;
@@ -85,7 +85,7 @@ export function FieldRouter({ field, disabled }: FieldRouterProps) {
 
   const handleBlur = () => touchField(field.id);
 
-  const type = (field as Record<string, unknown>).type as string;
+  const type = (field as unknown as Record<string, unknown>).type as string;
 
   // Computed field display
   if (field.computed) {

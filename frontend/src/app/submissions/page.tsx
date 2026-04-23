@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { api } from "@/lib/api";
-import { formatDate } from "@/lib/utils";
+import { api } from "@form-engine/libs/api";
+import { formatDate } from "@form-engine/libs/utils";
 import { toast } from "sonner";
 
 interface Submission {
@@ -15,7 +15,7 @@ interface Submission {
   submitted_at: string;
 }
 
-export default function SubmissionsPage() {
+function SubmissionsPageContent() {
   const params = useSearchParams();
   const manifestId = params.get("manifest") ?? undefined;
   const formId = params.get("form") ?? undefined;
@@ -156,5 +156,17 @@ export default function SubmissionsPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function SubmissionsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
+        <span className="h-7 w-7 rounded-full border-2 border-gray-300 border-t-blue-500 animate-spin" />
+      </div>
+    }>
+      <SubmissionsPageContent />
+    </Suspense>
   );
 }

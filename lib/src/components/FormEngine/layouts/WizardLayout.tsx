@@ -1,12 +1,12 @@
 "use client";
 
 import React, { useState } from "react";
-import type { FormManifest, FormDef, FieldAnswers, FormSubmissionResponse, Section } from "@/lib/types";
-import { useFormEngineStore } from "@/store/form-engine-store";
+import type { FormManifest, FormDef, FieldAnswers, FormSubmissionResponse, Section } from "../../../libs/types";
+import { useFormEngineStore } from "../../../store/form-engine-store";
 import { FieldRouter } from "../index";
 import { CollectionRenderer, ProFieldsSection } from "../CollectionRenderer";
-import { api } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { api } from "../../../libs/api";
+import { cn } from "../../../libs/utils";
 
 interface LayoutProps {
   manifest: FormManifest;

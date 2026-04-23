@@ -6,9 +6,9 @@
  *   const { answers, setAnswer, errors, submit } = useFormEngine();
  */
 import { useCallback } from "react";
-import { useFormEngineStore } from "@/store/form-engine-store";
-import { api } from "@/lib/api";
-import type { FieldAnswers, FormContext, FormManifest, FormSubmissionResponse } from "@/lib/types";
+import { useFormEngineStore } from "../store/form-engine-store";
+import { api } from "/libs/api";
+import type { FieldAnswers, FormContext, FormManifest, FormSubmissionResponse } from "../libs/types";
 
 export interface UseFormEngineReturn {
   // State
@@ -127,5 +127,5 @@ export function useFormEngineInit(
     void (() => init(manifest, formId, options?.initialAnswers, options?.context))();
   }
 
-  return useFormEngineStore();
+  return useFormEngineStore() as any;
 }

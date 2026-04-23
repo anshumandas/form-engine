@@ -341,7 +341,7 @@ export function validateField(field: FormField, value: unknown, allValues: Field
   }
   if (isEmpty) return errors;
 
-  const f = field as Record<string, unknown>;
+  const f = field as unknown as Record<string, unknown>;
 
   if (f.type === "text" || f.type === "multiline") {
     const str = String(value);
