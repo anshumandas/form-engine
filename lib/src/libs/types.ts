@@ -85,7 +85,37 @@ export interface DynamicChoicesConfig {
   option_filter?: Record<string, string>;
 }
 
-export type ChoiceSource = StaticChoice[] | DynamicChoicesConfig | string;
+/** Schema-conformant wrapper: choices: { dynamic: { url, value_key, label_key } } */
+export interface DynamicChoicesWrapper {
+  dynamic: DynamicChoicesConfig;
+}
+
+/** Schema-conformant wrapper: choices: { static: [...] } */
+export interface StaticChoicesWrapper {
+  static: StaticChoice[];
+}
+
+/** Named manifest data-source reference: choices: { source_ref: "myDataSource" } */
+export interface SourceRefConfig {
+  source_ref: string;
+}
+
+/**
+ * ChoiceSource — all forms accepted by the engine:
+ *   { dynamic: {...} }   schema-conformant dynamic source (preferred)
+ *   { source_ref: "x" }  reference to a manifest-level data_sources entry
+ *   { static: [...] }    explicit static wrapper
+ *   StaticChoice[]       bare array (legacy / most common)
+ *   DynamicChoicesConfig flat inline dynamic (backward compat)
+ *   string               plain alias (rarely used)
+ */
+export type ChoiceSource =
+  | DynamicChoicesWrapper
+  | SourceRefConfig
+  | StaticChoicesWrapper
+  | StaticChoice[]
+  | DynamicChoicesConfig
+  | string;
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 export interface ValidationRule {

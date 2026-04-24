@@ -93,15 +93,18 @@ forms:
                 max_length: 60
 
               - id: manifest_id
-                type: text
+                type: select
                 label: "Category"
                 required: true
                 width: half
-                placeholder: "e.g. my_app_forms"
-                hint: "Groups related forms together."
-                pattern: "^[a-z][a-z0-9_]*$"
-                pattern_message: "Only lowercase letters, numbers, and underscores allowed."
-                max_length: 60
+                hint: "Groups related forms together. Select an existing category or create one first."
+                display_as: dropdown
+                choices:
+                  dynamic:
+                    url: /api/categories
+                    value_key: category_id
+                    label_key: name
+                    cache_ttl_seconds: 30
 
               - id: form_description
                 type: multiline

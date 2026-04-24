@@ -504,7 +504,7 @@ function FieldInspector({ field, onChange }: {
       )}
       {(type === "select" || type === "multiselect") && (
         <ChoicesEditor
-          choices={Array.isArray(f.choices) ? f.choices as Array<{value:string;label:string}> : []}
+          choices={f.choices}
           onChange={choices => onChange({ choices } as Partial<FormField>)}
         />
       )}
@@ -631,31 +631,118 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 }
 
 function ChoicesEditor({ choices, onChange }: {
-  choices: Array<{value:string;label:string}>;
-  onChange: (c: Array<{value:string;label:string}>) => void;
+  choices: unknown;  // may be array OR { static: [...] } OR { dynamic: {...} }
+  onChange: (c: unknown) => void;
 }) {
+  // Detect the current mode
+  const isDynamic = !Array.isArray(choices) && choices != null && typeof choices === "object" && "dynamic" in (choices as object);
+  const staticList: Array<{value:string;label:string}> = isDynamic
+    ? []
+    : Array.isArray(choices) ? choices as Array<{value:string;label:string}>
+    : (choices as {static?: Array<{value:string;label:string}>})?.static ?? [];
+
+  type DynamicCfg = { url: string; value_key: string; label_key: string; cache_ttl_seconds?: number };
+  const dynamicCfg: DynamicCfg = isDynamic
+    ? (choices as {dynamic: DynamicCfg}).dynamic
+    : { url: "", value_key: "id", label_key: "name" };
+
+  const setStatic = (list: Array<{value:string;label:string}>) => onChange(list);
+  const setDynamic = (cfg: DynamicCfg) => onChange({ dynamic: cfg });
+
   return (
     <div>
-      <p className="text-gray-500 mb-1.5">Choices</p>
-      <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
-        {choices.map((c, i) => (
-          <div key={i} className="flex gap-1">
-            <input value={c.label} placeholder="Label"
-              onChange={e => onChange(choices.map((x,j) => j===i ? {...x,label:e.target.value} : x))}
-              className="flex-1 rounded-md border border-gray-200 px-2 py-1 text-xs bg-white focus:border-blue-400 focus:outline-none" />
-            <input value={c.value} placeholder="value"
-              onChange={e => onChange(choices.map((x,j) => j===i ? {...x,value:e.target.value} : x))}
-              className="w-20 rounded-md border border-gray-200 px-2 py-1 text-xs font-mono bg-white focus:border-blue-400 focus:outline-none" />
-            <button type="button" onClick={() => onChange(choices.filter((_,j) => j!==i))}
-              className="text-gray-300 hover:text-red-500 px-1 text-sm">✕</button>
-          </div>
-        ))}
+      {/* Mode tab switcher */}
+      <div className="flex items-center gap-1 mb-2">
+        <p className="text-gray-500 flex-1">Choices</p>
+        <div className="flex rounded-lg overflow-hidden border border-gray-200 text-xs">
+          <button type="button"
+            onClick={() => !isDynamic || setStatic([{ value: "opt1", label: "Option 1" }, { value: "opt2", label: "Option 2" }])}
+            className={cn("px-2 py-0.5 transition-colors",
+              !isDynamic ? "bg-blue-600 text-white" : "bg-white text-gray-500 hover:bg-gray-50"
+            )}>
+            Static
+          </button>
+          <button type="button"
+            onClick={() => isDynamic || setDynamic({ url: "", value_key: "id", label_key: "name" })}
+            className={cn("px-2 py-0.5 transition-colors",
+              isDynamic ? "bg-blue-600 text-white" : "bg-white text-gray-500 hover:bg-gray-50"
+            )}>
+            Dynamic
+          </button>
+        </div>
       </div>
-      <button type="button"
-        onClick={() => onChange([...choices, {value:`opt_${choices.length+1}`,label:`Option ${choices.length+1}`}])}
-        className="mt-1.5 text-xs text-blue-600 hover:underline">
-        + Add option
-      </button>
+
+      {isDynamic ? (
+        /* ── Dynamic config editor ─────────────────────────────────────── */
+        <div className="space-y-1.5 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/20 p-2">
+          <p className="text-[10px] text-blue-600 dark:text-blue-400 font-medium uppercase tracking-wide mb-1.5">
+            REST Data Source
+          </p>
+          <InspField label="Endpoint URL">
+            <InspInput
+              value={dynamicCfg.url}
+              onChange={v => setDynamic({ ...dynamicCfg, url: v })}
+              placeholder="/api/categories"
+              mono
+            />
+          </InspField>
+          <div className="grid grid-cols-2 gap-1.5">
+            <InspField label="Value key">
+              <InspInput
+                value={dynamicCfg.value_key}
+                onChange={v => setDynamic({ ...dynamicCfg, value_key: v })}
+                placeholder="id"
+                mono
+              />
+            </InspField>
+            <InspField label="Label key">
+              <InspInput
+                value={dynamicCfg.label_key}
+                onChange={v => setDynamic({ ...dynamicCfg, label_key: v })}
+                placeholder="name"
+                mono
+              />
+            </InspField>
+          </div>
+          <InspField label="Cache (seconds)">
+            <input
+              type="number"
+              min={0}
+              value={dynamicCfg.cache_ttl_seconds ?? 60}
+              onChange={e => setDynamic({ ...dynamicCfg, cache_ttl_seconds: Number(e.target.value) })}
+              className="w-full rounded-md border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-xs bg-white dark:bg-gray-800 focus:border-blue-400 focus:outline-none"
+            />
+          </InspField>
+          {dynamicCfg.url && (
+            <p className="text-[10px] text-blue-500 mt-1">
+              Fetches from <span className="font-mono">{dynamicCfg.url}</span> at runtime
+            </p>
+          )}
+        </div>
+      ) : (
+        /* ── Static choices editor ─────────────────────────────────────── */
+        <>
+          <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+            {staticList.map((c, i) => (
+              <div key={i} className="flex gap-1">
+                <input value={c.label} placeholder="Label"
+                  onChange={e => setStatic(staticList.map((x,j) => j===i ? {...x,label:e.target.value} : x))}
+                  className="flex-1 rounded-md border border-gray-200 px-2 py-1 text-xs bg-white focus:border-blue-400 focus:outline-none" />
+                <input value={c.value} placeholder="value"
+                  onChange={e => setStatic(staticList.map((x,j) => j===i ? {...x,value:e.target.value} : x))}
+                  className="w-20 rounded-md border border-gray-200 px-2 py-1 text-xs font-mono bg-white focus:border-blue-400 focus:outline-none" />
+                <button type="button" onClick={() => setStatic(staticList.filter((_,j) => j!==i))}
+                  className="text-gray-300 hover:text-red-500 px-1 text-sm">✕</button>
+              </div>
+            ))}
+          </div>
+          <button type="button"
+            onClick={() => setStatic([...staticList, {value:`opt_${staticList.length+1}`,label:`Option ${staticList.length+1}`}])}
+            className="mt-1.5 text-xs text-blue-600 hover:underline">
+            + Add option
+          </button>
+        </>
+      )}
     </div>
   );
 }

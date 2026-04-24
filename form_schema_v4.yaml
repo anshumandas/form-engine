@@ -1,0 +1,2593 @@
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  form.schema.yaml  —  v4.0.0                                                ║
+# ║  Unified Form Engine Specification                                          ║
+# ║                                                                              ║
+# ║  Lineage                                                                     ║
+# ║  ─────────────────────────────────────────────────────────────────────────  ║
+# ║  v1/v2  Flat sections + fields, validation, choice sources, submit          ║
+# ║  v3     Pages layer, wizard navigation, branch/goTo, draft_config           ║
+# ║  v4     Merged three streams:                                               ║
+# ║           (A) Schema additions from 02_schemata / 01_core —                ║
+# ║               confidentiality, editability, personal_data, formula_default, ║
+# ║               groups, number_type, allow_others, use_current, etc.          ║
+# ║           (B) Runtime manifest from form_schema_v4_alt —                   ║
+# ║               engine, namespaces, types, models, named condition/           ║
+# ║               validation/action/dataSource registries, computed fields,     ║
+# ║               bind, ui widgets, reusable components, i18n, tracking         ║
+# ║           (C) UAM integration from 03_uam —                                ║
+# ║               form-level access block (feature gate, role categories,       ║
+# ║               auth context key, submit action mapping); field-level          ║
+# ║               permission_ref and visible_access_levels.                     ║
+# ║               RBAC (User/Role/Permission/Team) stays in uam namespace.      ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+$schema: "https://json-schema.org/draft/2020-12/schema"
+$id:     "https://schemas.example.com/form-engine/v4/form.schema.yaml"
+title:   FormEngineManifest
+
+description: >
+  Top-level manifest consumed by the FormEngine runtime.
+  A single file may define types, models, shared registries, and one or more
+  forms. Each form renders as a standalone wizard or single-page form.
+
+  Namespace contract:
+    core      — Event, Audited, DataRef, Data, RelatedData, Formula, Pattern
+    schemata  — Schema, Field, Relationship, Group, DataType, ContainerType
+    uam       — RoleCategory, AccessLevel, Auth (resolved at runtime)
+    form      — everything defined in this file
+
+type: object
+additionalProperties: false
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TOP-LEVEL SECTIONS
+# Every section is optional so partial manifests (e.g. a file that only adds
+# shared data sources) remain valid.
+# ─────────────────────────────────────────────────────────────────────────────
+properties:
+
+  # ── Document identity ───────────────────────────────────────────────────────
+  manifest_id:
+    type: string
+    pattern: "^[a-z][a-z0-9_]*$"
+    minLength: 2
+    maxLength: 80
+    description: >
+      Unique identifier for this manifest file.
+      Used to namespace all form IDs defined within it.
+
+  manifest_version:
+    type: string
+    pattern: "^\\d+\\.\\d+\\.\\d+$"
+    default: "4.0.0"
+
+  # ── Engine ───────────────────────────────────────────────────────────────────
+  engine:
+    $ref: "#/$defs/EngineConfig"
+
+  # ── Namespace imports ────────────────────────────────────────────────────────
+  namespaces:
+    type: array
+    description: >
+      Ordered list of namespaces this manifest depends on.
+      The runtime resolves cross-namespace $ref strings of the form
+      "namespace#TypeName" using this list.
+    items:
+      type: string
+      enum: [core, schemata, uam, form]
+    uniqueItems: true
+
+  # ── Type system ──────────────────────────────────────────────────────────────
+  types:
+    $ref: "#/$defs/TypeSystem"
+
+  # ── Domain models ────────────────────────────────────────────────────────────
+  models:
+    type: object
+    description: >
+      Named domain models. A form may bind its fields to a model via
+      "model: ModelName". The model provides type information and enables
+      deep-path binding (e.g. bind: address.city).
+    additionalProperties:
+      $ref: "#/$defs/ModelDef"
+
+  # ── Named registries (shared across all forms in this manifest) ──────────────
+  conditions:
+    type: object
+    description: >
+      Named condition definitions reusable by reference across forms, sections,
+      and fields. Reference: { ref: conditionName }.
+    additionalProperties:
+      $ref: "#/$defs/NamedCondition"
+
+  validation:
+    $ref: "#/$defs/ValidationRegistry"
+
+  actions:
+    type: object
+    description: >
+      Named action definitions. A form may trigger actions on events such as
+      field change, page advance, or submission.
+    additionalProperties:
+      $ref: "#/$defs/ActionDef"
+
+  data_sources:
+    type: object
+    description: >
+      Named data source definitions. Select/multiselect fields reference these
+      by name instead of embedding REST config inline.
+    additionalProperties:
+      $ref: "#/$defs/DataSourceDef"
+
+  # ── UI layer ─────────────────────────────────────────────────────────────────
+  ui:
+    $ref: "#/$defs/UIConfig"
+
+  # ── Reusable field-group components ──────────────────────────────────────────
+  components:
+    type: object
+    description: >
+      Named reusable field-group templates (e.g. an address block).
+      A section may include a component via { component: componentName }.
+    additionalProperties:
+      $ref: "#/$defs/ComponentDef"
+
+  # ── Internationalisation ─────────────────────────────────────────────────────
+  i18n:
+    type: object
+    description: >
+      Translation tables keyed by BCP-47 locale code.
+      Each locale maps field IDs (and other keys) to translated strings.
+      The runtime picks the table matching the active locale.
+      Field labels / hints / placeholders are overridden by the matching key.
+    additionalProperties:
+      type: object
+      additionalProperties:
+        type: string
+
+  # ── Analytics / event tracking ───────────────────────────────────────────────
+  tracking:
+    $ref: "#/$defs/TrackingConfig"
+
+  # ── Form definitions ─────────────────────────────────────────────────────────
+  forms:
+    type: object
+    description: >
+      One or more form definitions keyed by form_id.
+    additionalProperties:
+      $ref: "#/$defs/Form"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# $defs
+# ══════════════════════════════════════════════════════════════════════════════
+$defs:
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  ENGINE                                                                  ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  EngineConfig:
+    type: object
+    additionalProperties: false
+    description: >
+      Controls the runtime evaluation strategy for the form engine.
+    properties:
+      mode:
+        type: string
+        enum: [reactive, static]
+        default: reactive
+        description: >
+          reactive — fields, conditions, and computed values re-evaluate
+                     automatically whenever any dependency changes.
+          static   — evaluation is triggered only on explicit events
+                     (blur, submit).
+      evaluation_order:
+        type: string
+        enum: [dependency, declaration]
+        default: dependency
+        description: >
+          dependency  — fields are evaluated in topological dependency order
+                        (computed fields after their inputs).
+          declaration — fields are evaluated in the order they are declared
+                        (simpler but may require multiple passes).
+      error_mode:
+        type: string
+        enum: [fail-fast, collect-all]
+        default: collect-all
+        description: >
+          fail-fast   — stop validation at the first error.
+          collect-all — run all validators and surface all errors at once.
+      debounce_ms:
+        type: integer
+        minimum: 0
+        default: 300
+        description: >
+          Milliseconds to debounce reactive re-evaluation and async validators.
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  TYPE SYSTEM                                                             ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  TypeSystem:
+    type: object
+    additionalProperties: false
+    description: >
+      Local type definitions. Types defined here can be referenced by model
+      fields and field "type:" declarations using their key name.
+    properties:
+
+      primitives:
+        type: object
+        description: Primitive type overrides or documentation stubs.
+        additionalProperties:
+          type: object
+
+      enums:
+        type: object
+        description: >
+          Named enum types with a "values" list.
+          Example:
+            Priority:
+              values: [low, medium, high, critical]
+        additionalProperties:
+          type: object
+          required: [values]
+          additionalProperties: false
+          properties:
+            values:
+              type: array
+              items:
+                oneOf:
+                  - type: string
+                  - type: integer
+              minItems: 1
+            description:
+              type: string
+
+      objects:
+        type: object
+        description: >
+          Named structured object types.
+          Example:
+            Address:
+              fields:
+                street: { type: string }
+                city:   { type: string }
+                zip:    { type: string, pattern: "^\\d{5,6}$" }
+        additionalProperties:
+          $ref: "#/$defs/ObjectTypeDef"
+
+      aliases:
+        type: object
+        description: >
+          Type aliases — a named type that wraps a primitive with added
+          validation. Fields may declare "type: Email" instead of
+          "type: text" + inline regex.
+        additionalProperties:
+          $ref: "#/$defs/AliasTypeDef"
+
+  ObjectTypeDef:
+    type: object
+    additionalProperties: false
+    required: [fields]
+    properties:
+      description:
+        type: string
+      fields:
+        type: object
+        additionalProperties:
+          type: object
+          properties:
+            type:
+              type: string
+            required:
+              type: boolean
+            description:
+              type: string
+
+  AliasTypeDef:
+    type: object
+    additionalProperties: false
+    required: [type]
+    properties:
+      type:
+        type: string
+        description: The base primitive type (string, number, boolean, date, …).
+      description:
+        type: string
+      validation:
+        type: array
+        items:
+          type: object
+          required: [type]
+          properties:
+            type:
+              type: string
+              enum: [regex, min, max, min_length, max_length, custom]
+            value:
+              description: The constraint value (pattern string, number, etc.)
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  MODELS                                                                  ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  ModelDef:
+    type: object
+    additionalProperties: false
+    description: >
+      A domain model that a form can bind to. Model fields provide default
+      type information so individual form fields can use "bind: fieldPath"
+      and inherit constraints from the model rather than restating them.
+    required: [fields]
+    properties:
+      description:
+        type: string
+      inherits:
+        type: array
+        description: Model names to inherit fields from (resolved in order).
+        items:
+          type: string
+        uniqueItems: true
+      fields:
+        type: object
+        additionalProperties:
+          type: object
+          properties:
+            type:
+              type: string
+              description: Primitive, alias, enum, or object type name.
+            required:
+              type: boolean
+            description:
+              type: string
+            confidentiality:
+              $ref: "#/$defs/ConfidentialityType"
+            personal_data:
+              type: boolean
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  NAMED REGISTRIES                                                        ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  NamedCondition:
+    type: object
+    description: >
+      A reusable named condition. Reference it in any field/section condition
+      or branch rule using { ref: conditionName }.
+    required: [expression]
+    additionalProperties: false
+    properties:
+      description:
+        type: string
+      expression:
+        type: string
+        description: >
+          A formula expression string evaluated against the current answer
+          state (accessible as "fields.*") and context (accessible as
+          "context.*"). Must resolve to a boolean.
+        minLength: 1
+        maxLength: 1000
+      # Alternatively, a structured Condition object may be provided
+      condition:
+        $ref: "#/$defs/Condition"
+
+  ValidationRegistry:
+    type: object
+    additionalProperties: false
+    description: >
+      Named validation rule definitions reusable across forms and fields.
+    properties:
+      rules:
+        type: object
+        additionalProperties:
+          $ref: "#/$defs/NamedValidationRule"
+
+  NamedValidationRule:
+    type: object
+    required: [type]
+    additionalProperties: false
+    description: >
+      A reusable named validation rule. Fields reference it via
+      validation.rule_ref: ruleName.
+    properties:
+      type:
+        type: string
+        enum: [required, regex, min, max, min_length, max_length,
+               min_date, max_date, min_selected, max_selected,
+               expression, custom, async]
+      description:
+        type: string
+      value:
+        description: The rule constraint (pattern, number, date expression, etc.)
+      expression:
+        type: string
+        description: >
+          For type=expression: a formula that must evaluate to true.
+          Access fields via fields.* and context via context.*.
+        maxLength: 1000
+      message:
+        type: string
+        description: Default error message for this rule.
+        maxLength: 200
+      handler:
+        type: string
+        description: >
+          For type=custom or type=async: name of a registered validator
+          function on the <FormEngine /> validators prop.
+
+  ActionDef:
+    type: object
+    required: [type]
+    additionalProperties: false
+    description: >
+      A named action that can be triggered by form events.
+    properties:
+      type:
+        type: string
+        enum: [set_field, show_section, hide_section, navigate, api_call,
+               emit_event, custom]
+      description:
+        type: string
+      params:
+        type: array
+        description: Parameter names this action accepts when called.
+        items:
+          type: string
+      handler:
+        type: string
+        description: >
+          For type=custom: name of a registered action handler on
+          <FormEngine />.
+
+  DataSourceDef:
+    type: object
+    required: [type]
+    additionalProperties: false
+    description: >
+      A named data source for select/multiselect dynamic choices.
+      Fields reference this by name instead of embedding URL config inline.
+      Supports interpolation of {{context.*}} and {{fields.*}} tokens.
+    properties:
+      type:
+        type: string
+        enum: [rest, local, graphql]
+        description: >
+          rest    — HTTP REST endpoint.
+          local   — calls a named function registered on <FormEngine />.
+          graphql — GraphQL query endpoint.
+      description:
+        type: string
+      endpoint:
+        type: string
+        description: >
+          URL for type=rest or type=graphql.
+          Supports {{context.*}} and {{fields.*}} interpolation.
+        minLength: 1
+      method:
+        type: string
+        enum: [GET, POST]
+        default: GET
+      headers:
+        type: object
+        additionalProperties:
+          type: string
+      query_params:
+        type: object
+        additionalProperties:
+          type: string
+      body_template:
+        type: string
+        description: JSON template for POST body. Supports token interpolation.
+      response_path:
+        type: string
+        default: ""
+        description: Dot-path into the response JSON to reach the items array.
+      value_key:
+        type: string
+        description: Key in each item to use as the stored option value.
+      label_key:
+        type: string
+        description: Key in each item to use as the display label.
+      group_key:
+        type: string
+        description: Optional key for grouping items.
+      search_param:
+        type: string
+        description: >
+          Query parameter name for server-side search.
+          When set, the field always renders as a searchable Combobox.
+      cache_ttl_seconds:
+        type: integer
+        minimum: 0
+        default: 300
+      handler:
+        type: string
+        description: "For type=local: name of a registered data function."
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  UI LAYER                                                                ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  UIConfig:
+    type: object
+    additionalProperties: false
+    properties:
+      widgets:
+        type: object
+        description: >
+          Map of logical widget names to their component implementations.
+          A field may declare "widget: widgetName" to override the default
+          component chosen by the engine for its type.
+        additionalProperties:
+          type: object
+          required: [component]
+          additionalProperties: false
+          properties:
+            component:
+              type: string
+              description: Component name registered in the UI framework.
+            props:
+              type: object
+              description: Static default props forwarded to the component.
+              additionalProperties: true
+      theme:
+        type: object
+        description: >
+          CSS variable overrides or design-token map applied to the form shell.
+        additionalProperties:
+          type: string
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  COMPONENTS  (reusable field groups)                                     ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  ComponentDef:
+    type: object
+    required: [fields]
+    additionalProperties: false
+    description: >
+      A reusable named field-group template. Include in a section via:
+        sections:
+          - component: addressBlock
+            bind_prefix: address
+      bind_prefix prepends to each field's bind path so
+      "{ id: street, bind: street }" becomes "address.street".
+    properties:
+      description:
+        type: string
+      fields:
+        type: array
+        minItems: 1
+        items:
+          $ref: "#/$defs/Field"
+      cross_field_validations:
+        type: array
+        items:
+          $ref: "#/$defs/CrossFieldValidation"
+      groups:
+        type: array
+        items:
+          $ref: "#/$defs/FieldGroup"
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  TRACKING                                                                ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  TrackingConfig:
+    type: object
+    additionalProperties: false
+    properties:
+      provider:
+        type: string
+        description: >
+          Name of a tracking provider registered on <FormEngine />.
+          Receives all events defined in the "events" map.
+        minLength: 1
+      events:
+        type: object
+        description: >
+          Named event definitions. Each event specifies a trigger and a
+          payload template. Payload values support {{field.id}},
+          {{field.value}}, {{form.id}}, {{context.*}} interpolation.
+        additionalProperties:
+          type: object
+          required: [trigger]
+          additionalProperties: false
+          properties:
+            trigger:
+              type: string
+              enum: [onChange, onBlur, onFocus, onSubmit, onPageChange,
+                     onSectionEnter, onSectionExit, onError, onDraftSave]
+            payload:
+              type: object
+              additionalProperties:
+                type: string
+            condition:
+              $ref: "#/$defs/Condition"
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  UAM INTEGRATION                                                         ║
+  # ║  The form engine does NOT own RBAC. RBAC lives in the uam namespace.    ║
+  # ║  These defs describe how the form engine connects to uam at runtime.     ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+
+  # Copied from uam#AccessLevel for local schema validation only.
+  # The authoritative definition is in 03_uam.yaml.
+  AccessLevel:
+    type: string
+    description: >
+      [Mirror of uam#AccessLevel — authoritative definition in 03_uam.yaml]
+      The scope of data records a user may read or write:
+        Self       — only records owned by the current user.
+        Delegated  — records the current user has been explicitly delegated.
+        Team       — records owned by any member of the user's team(s).
+        Reportee   — records owned by the user's direct reportees.
+        Category   — all records within the user's role category scope.
+    enum: [Self, Delegated, Team, Reportee, Category]
+
+  # Copied from uam#RoleCategory for local schema validation only.
+  RoleCategory:
+    type: string
+    description: >
+      [Mirror of uam#RoleCategory — authoritative definition in 03_uam.yaml]
+      Broad classification of who is filling / operating this form:
+        Customer   — external end-user.
+        Employee   — internal employee.
+        Partner    — external partner / vendor.
+        Contractor — temporary contractor.
+        Automaton  — automated process / bot.
+    enum: [Customer, Employee, Partner, Contractor, Automaton]
+
+  # The resolved Auth object that UAM computes from User→Roles→Permissions
+  # and passes to the form engine via context. The engine uses this to
+  # enforce field visibility, submit gating, and filter application.
+  # [Mirror of uam#Auth — authoritative definition in 03_uam.yaml]
+  ResolvedAuth:
+    type: object
+    description: >
+      Shape of the uam#Auth object the engine expects at context[auth_context_key].
+      Computed by the UAM service from the current user's roles and permissions;
+      the form engine READS this but never writes it.
+      Fields not present in auth.fields (when auth.fields is non-empty) are
+      hidden from the rendered form. auth.filters are applied to all
+      data_source queries as additional query parameters.
+    additionalProperties: false
+    properties:
+      userId:
+        type: string
+      schemaId:
+        type: string
+      read:
+        type: boolean
+        default: false
+      create:
+        type: boolean
+        default: false
+      update:
+        type: boolean
+        default: false
+      deactivate:
+        type: boolean
+        default: false
+      reactivate:
+        type: boolean
+        default: false
+      upload:
+        type: boolean
+        default: false
+      download:
+        type: boolean
+        default: false
+      print:
+        type: boolean
+        default: false
+      share:
+        type: boolean
+        default: false
+      accessLevel:
+        $ref: "#/$defs/AccessLevel"
+      fields:
+        type: array
+        description: >
+          When non-empty, only these field IDs are rendered and submitted.
+          An empty array means all fields are visible (no field restriction).
+        items:
+          type: string
+      filters:
+        type: object
+        description: >
+          Key-value filters applied to all data_source queries made by this
+          form while the current auth is active.
+        additionalProperties:
+          type: string
+
+  FormAccess:
+    type: object
+    description: >
+      Declares how the form connects to the UAM layer at runtime.
+      The form engine does not evaluate RBAC itself — it only reads the
+      resolved uam#Auth object from context and enforces what it finds there.
+    additionalProperties: false
+    properties:
+
+      feature_ref:
+        type: string
+        description: >
+          Name of the uam#Feature that gates access to this form.
+          The engine will not render the form if auth does not include
+          access to this feature. Checked before any field is rendered.
+        minLength: 1
+        maxLength: 80
+
+      allowed_role_categories:
+        type: array
+        description: >
+          Which uam#RoleCategory values are permitted to open and submit
+          this form. The engine reads the user's role category from context
+          and rejects access if not listed here. An empty list means all
+          categories are permitted.
+        items:
+          $ref: "#/$defs/RoleCategory"
+        uniqueItems: true
+
+      auth_context_key:
+        type: string
+        description: >
+          The key under which the resolved uam#Auth object is passed in the
+          FormContext. Defaults to "auth". Change this if multiple auth
+          scopes are in context simultaneously (e.g. "hrAuth", "financeAuth").
+        default: auth
+        minLength: 1
+        maxLength: 60
+
+      submit_requires:
+        type: string
+        description: >
+          The uam#Auth boolean action flag that must be true for the submit
+          button to be enabled. Maps directly to a field on uam#Auth:
+            create     — user may create a new record.
+            update     — user may update an existing record.
+            deactivate — user may deactivate a record.
+            reactivate — user may reactivate a record.
+            upload     — user may upload attachments.
+          If omitted, the engine defaults to "create" for new forms
+          and "update" for edit forms.
+        enum: [create, update, deactivate, reactivate, upload]
+
+      read_requires:
+        type: string
+        description: >
+          Auth flag required to view the form in read-only mode.
+          Defaults to "read" when omitted.
+        enum: [read, download, print, share]
+        default: read
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  FORM                                                                    ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  Form:
+    type: object
+    required:
+      - title
+      - version
+      - layout
+    additionalProperties: false
+    description: >
+      A complete form definition. Fields may bind to a model, use named
+      conditions and validators from the manifest registries, or define
+      everything inline.
+
+      Layout hierarchy:
+        pages    → Page[]    (multi-step wizard with pages as steps)
+        sections → Section[] (flat or single-step layout)
+      When both present, pages takes precedence.
+
+    properties:
+
+      # ── Identity & lifecycle ─────────────────────────────────────────────
+      title:
+        type: string
+        minLength: 1
+        maxLength: 120
+
+      description:
+        type: string
+        description: Subtitle / instruction text. Supports Markdown.
+        maxLength: 2000
+
+      version:
+        type: string
+        pattern: "^\\d+\\.\\d+\\.\\d+$"
+        description: >
+          Semver. Bump the major version when changes break saved drafts.
+
+      form_state:
+        $ref: "#/$defs/FormState"
+        default: active
+
+      tags:
+        type: object
+        description: Free metadata map (key → string) for tooling and audit.
+        additionalProperties:
+          type: string
+
+      # ── Compliance (from schemata/01_core patterns) ──────────────────────
+      confidentiality:
+        $ref: "#/$defs/ConfidentialityType"
+        description: >
+          Default access classification for this form.
+          Field-level confidentiality overrides this default.
+        default: Internal
+
+      retention_days:
+        type: [integer, "null"]
+        minimum: 0
+        description: >
+          Days to retain submitted answers. null/0 = indefinite.
+          1 = do not persist the payload at all.
+
+      # ── UAM integration (from 03_uam — no RBAC ownership) ───────────────
+      access:
+        $ref: "#/$defs/FormAccess"
+
+      # ── Model binding (from alt v4) ───────────────────────────────────────
+      model:
+        type: string
+        description: >
+          Name of a model defined in this manifest's "models" section.
+          Form fields that declare "bind: fieldPath" resolve their type
+          and constraints from this model. Fully explicit field definitions
+          override any model-derived constraints.
+
+      # ── State / persistence ───────────────────────────────────────────────
+      state:
+        type: object
+        additionalProperties: false
+        properties:
+          persistence:
+            type: string
+            enum: [localStorage, sessionStorage, tauri-fs, custom, none]
+            default: localStorage
+            description: >
+              localStorage   — survives tab close (default).
+              sessionStorage — survives refresh, not tab close.
+              tauri-fs       — write to app data dir via Tauri fs plugin.
+              custom         — call saveDraft/loadDraft handlers on <FormEngine />.
+              none           — disable draft persistence entirely.
+          auto_save:
+            type: boolean
+            default: false
+            description: >
+              When true the engine persists the draft automatically on every
+              change (debounced by engine.debounce_ms).
+          draft_key:
+            type: string
+            description: >
+              Explicit storage key. Falls back to form_id when omitted.
+            minLength: 1
+            maxLength: 120
+
+      # ── Layout ────────────────────────────────────────────────────────────
+      layout:
+        type: object
+        required: [type]
+        additionalProperties: false
+        properties:
+          type:
+            type: string
+            enum: [single-page, wizard, grid]
+            description: >
+              single-page — all sections rendered as a single scrollable page.
+              wizard      — one page (or section when pages absent) at a time.
+              grid        — free 12-column grid; fields declare col_span.
+          columns:
+            type: integer
+            minimum: 1
+            maximum: 12
+            default: 12
+            description: >
+              Number of grid columns (for layout.type=grid).
+              Field width hints (full/half/third) are expressed relative to
+              this column count.
+
+      # ── Labels ────────────────────────────────────────────────────────────
+      submit_label:
+        type: string
+        default: "Submit"
+        maxLength: 50
+
+      draft_label:
+        type: string
+        default: "Save Draft"
+        maxLength: 50
+
+      # ── Structure ─────────────────────────────────────────────────────────
+      pages:
+        type: array
+        minItems: 1
+        maxItems: 30
+        items:
+          $ref: "#/$defs/Page"
+
+      sections:
+        type: array
+        minItems: 1
+        maxItems: 50
+        items:
+          $ref: "#/$defs/Section"
+
+      on_submit:
+        $ref: "#/$defs/SubmitAction"
+
+    if:
+      not:
+        anyOf:
+          - required: [pages]
+          - required: [sections]
+    then:
+      description: "At least one of 'pages' or 'sections' must be present."
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  PAGE                                                                    ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  Page:
+    type: object
+    required: [id, title, sections]
+    additionalProperties: false
+    properties:
+      id:
+        type: string
+        pattern: "^[a-z][a-z0-9_]*$"
+        minLength: 1
+        maxLength: 60
+      title:
+        type: string
+        minLength: 1
+        maxLength: 120
+      description:
+        type: string
+        maxLength: 1000
+      icon:
+        type: string
+        description: Lucide icon name for the wizard step indicator.
+        maxLength: 50
+      condition:
+        $ref: "#/$defs/ConditionOrRef"
+        description: >
+          Entire page is skipped when condition evaluates to false.
+      on_enter:
+        $ref: "#/$defs/ActionRef"
+        description: Action to trigger when the user arrives at this page.
+      on_exit:
+        $ref: "#/$defs/ActionRef"
+        description: Action to trigger when the user leaves this page.
+      sections:
+        type: array
+        minItems: 1
+        maxItems: 50
+        items:
+          $ref: "#/$defs/Section"
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  SECTION                                                                 ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  Section:
+    type: object
+    additionalProperties: false
+    description: >
+      A section is a named group of fields. It may also include a component
+      (shorthand for embedding a pre-defined field group), a collection
+      (repeating sub-form), and cross-field groups/validations.
+    properties:
+      id:
+        type: string
+        pattern: "^[a-z][a-z0-9_]*$"
+        minLength: 1
+        maxLength: 60
+      title:
+        type: string
+        minLength: 1
+        maxLength: 80
+      description:
+        type: string
+        maxLength: 1000
+      icon:
+        type: string
+        maxLength: 50
+      condition:
+        $ref: "#/$defs/ConditionOrRef"
+      bind_prefix:
+        type: string
+        description: >
+          Dot-notation path prepended to the bind paths of all fields in
+          this section. Useful when embedding a component or when all
+          section fields belong to the same model sub-object.
+          Example: bind_prefix: address  +  field bind: city  →  address.city
+      component:
+        type: string
+        description: >
+          Name of a manifest-level component to embed. The component's
+          fields are rendered as if inline. bind_prefix is applied on top.
+          When "component" is present, "fields" should be omitted.
+      collection:
+        $ref: "#/$defs/Collection"
+      fields:
+        type: array
+        minItems: 1
+        maxItems: 200
+        items:
+          $ref: "#/$defs/Field"
+      cross_field_validations:
+        type: array
+        items:
+          $ref: "#/$defs/CrossFieldValidation"
+      groups:
+        type: array
+        description: >
+          Structural cross-field groups with OneOf/AnyOf/AllOf/Index
+          semantics. Complement to cross_field_validations.
+        items:
+          $ref: "#/$defs/FieldGroup"
+        minItems: 1
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  FIELD BASE                                                              ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  FieldBase:
+    type: object
+    required: [id]
+    description: >
+      Properties common to all field types.
+      Either "type" (explicit) or "bind" (model-derived) must be present.
+      When both are present, explicit type constraints override model defaults.
+    properties:
+
+      id:
+        type: string
+        pattern: "^[a-z][a-z0-9_]*$"
+        minLength: 1
+        maxLength: 60
+        description: Unique identifier within the form. Used as the answer map key.
+
+      type:
+        type: string
+        description: Explicit discriminator for the field variant.
+        enum:
+          - text
+          - multiline
+          - richtext
+          - boolean
+          - number
+          - select
+          - multiselect
+          - date
+          - time
+          - datetime
+          - daterange
+          - file
+          - rating
+          - color
+          - json
+          - signature
+          - location
+          - hidden
+          - complex
+
+      # ── Model binding (from alt v4) ─────────────────────────────────────
+      bind:
+        type: string
+        description: >
+          Dot-notation path into the bound model (e.g. "address.city").
+          The engine resolves the field's data type and base constraints
+          from the model path. Explicit type/validation properties override
+          model-derived ones.
+        minLength: 1
+
+      # ── Computed field (from alt v4) ────────────────────────────────────
+      computed:
+        $ref: "#/$defs/ComputedField"
+        description: >
+          When present, this field's value is always derived from the
+          expression — it cannot be directly edited by the user.
+          Distinct from formula_default (one-time initial value) and
+          from hidden (which can be set from context/querystring).
+          Computed fields are included in the submitted answer payload
+          unless ui_only=true.
+
+      label:
+        type: string
+        minLength: 1
+        maxLength: 120
+
+      hint:
+        type: string
+        maxLength: 300
+
+      placeholder:
+        type: string
+        maxLength: 120
+
+      widget:
+        type: string
+        description: >
+          Name of a manifest ui.widgets entry to use for rendering.
+          Overrides the default component the engine selects for this type.
+
+      required:
+        type: boolean
+        default: false
+
+      required_if:
+        type: string
+        description: >
+          Formula expression. When it evaluates to true at runtime this field
+          is required regardless of the static "required" flag.
+          Example: "fields.employment_type === 'contractor'"
+        maxLength: 500
+
+      readonly:
+        type: boolean
+        default: false
+        description: >
+          Shorthand for editability=Immutable. Kept for backward compatibility.
+          editability takes precedence when both are present.
+
+      editability:
+        $ref: "#/$defs/EditabilityType"
+        description: >
+          Mutable       — always editable (default).
+          MutableIfNull — editable only until a value is set.
+          Immutable     — read-only after first save.
+          Generated     — auto-filled by system; never shown as input.
+
+      default:
+        description: Static default value pre-populated at initialisation.
+
+      formula_default:
+        $ref: "#/$defs/FormulaDefault"
+        description: >
+          Expression-based default evaluated once at initialisation.
+          Takes precedence over static "default" when both are present.
+
+      condition:
+        $ref: "#/$defs/ConditionOrRef"
+        description: Passive show/hide. Field is only rendered when true.
+
+      clear_on_hide:
+        type: boolean
+        default: false
+        description: >
+          When true the stored answer is cleared when the field's condition
+          evaluates to false. Default behaviour retains the value in memory.
+
+      branch:
+        type: array
+        description: >
+          Active skip-logic rules. First matching rule navigates the wizard
+          to the specified target instead of advancing sequentially.
+        items:
+          $ref: "#/$defs/Branch"
+        minItems: 1
+
+      validation:
+        $ref: "#/$defs/Validation"
+
+      validate_on:
+        type: string
+        enum: [blur, change, submit]
+        default: blur
+
+      width:
+        type: string
+        enum: [full, half, third]
+        default: full
+
+      col_span:
+        type: integer
+        minimum: 1
+        maximum: 12
+        description: >
+          Explicit grid column span for layout.type=grid.
+          Overrides the "width" hint.
+
+      # ── Compliance flags (from 02_schemata / 01_core) ───────────────────
+      confidentiality:
+        $ref: "#/$defs/ConfidentialityType"
+        description: Per-field override of the form-level confidentiality.
+
+      personal_data:
+        type: boolean
+        default: false
+        description: >
+          Marks this field as personal data (DPDP / GDPR).
+          When true: "purpose" is required and confidentiality must not be Public.
+
+      purpose:
+        type: string
+        description: >
+          Processing purpose for this personal data field.
+          Required when personal_data=true.
+        maxLength: 500
+
+      retention_days:
+        type: [integer, "null"]
+        minimum: 0
+        description: Per-field retention override. Overrides the form-level value.
+
+      # ── Data modelling flags (from 02_schemata) ──────────────────────────
+      system_generated:
+        type: boolean
+        default: false
+        description: >
+          Auto-populated by system logic. Not rendered as a user input.
+          Equivalent to editability=Generated.
+
+      summary_field:
+        type: boolean
+        default: false
+        description: >
+          Appears in list/summary views, notification emails, and audit logs.
+
+      key_field:
+        type: boolean
+        default: false
+        description: >
+          Part of the record's unique key. Combination of all key_field=true
+          fields must be unique across submissions. Implicitly indexed.
+
+      # ── UI tier / visibility ─────────────────────────────────────────────
+      advanced:
+        type: boolean
+        default: false
+        description: >
+          Hidden behind a "Show more options" / "Advanced" disclosure toggle.
+
+      ui_only:
+        type: boolean
+        default: false
+        description: >
+          Value exists in local form state only and is excluded from the
+          submitted payload. Useful for driver fields used only in conditions.
+
+      # ── Grouping (from 02_schemata) ───────────────────────────────────────
+      one_of_group:
+        type: string
+        description: >
+          Mutual-exclusivity group name. At most one field sharing this group
+          name in the same section may be non-empty. Filling this field
+          clears all sibling fields in the same group.
+        minLength: 1
+        maxLength: 60
+
+      # ── UAM integration (runtime-only, no RBAC ownership) ────────────────
+      permission_ref:
+        type: string
+        description: >
+          Name of a uam#Permission. At runtime, if the resolved uam#Auth
+          includes a non-empty "fields" list that does NOT contain this
+          field's id, the field is hidden and excluded from submission.
+          The form engine reads this passively — it does not evaluate
+          permissions itself.
+        minLength: 1
+        maxLength: 80
+
+      visible_access_levels:
+        type: array
+        description: >
+          Minimum uam#AccessLevel values required to see this field.
+          If the resolved uam#Auth.accessLevel is not in this list, the
+          field is hidden. An empty list means any access level may see it.
+        items:
+          $ref: "#/$defs/AccessLevel"
+        uniqueItems: true
+
+      # ── Free metadata ─────────────────────────────────────────────────────
+      tags:
+        type: object
+        description: Free key→string metadata map for tooling and audit.
+        additionalProperties:
+          type: string
+
+    # personal_data guard
+    if:
+      properties:
+        personal_data:
+          const: true
+    then:
+      required: [purpose]
+      properties:
+        confidentiality:
+          not:
+            const: Public
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  COMPUTED FIELD                                                          ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  ComputedField:
+    type: object
+    required: [expression]
+    additionalProperties: false
+    description: >
+      A reactive derived value. Re-evaluated whenever any dependency changes
+      (engine.mode=reactive) or on explicit trigger (engine.mode=static).
+    properties:
+      expression:
+        type: string
+        description: >
+          Formula evaluated against the live answer state.
+          Access sibling fields via fields.*, context via context.*.
+          Examples:
+            fields.firstName + " " + fields.lastName
+            fields.quantity * fields.unit_price
+            fields.birth_date ? (today() - fields.birth_date).years : null
+        minLength: 1
+        maxLength: 1000
+      type_hint:
+        type: string
+        description: >
+          Expected return type of the expression. Used for formatting only.
+          If omitted, the engine infers from context.
+        enum: [string, number, boolean, date, datetime]
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  FIELD — discriminated union                                             ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  Field:
+    description: >
+      A form field. Discriminated by "type".
+      When only "bind" is present (no "type"), the engine infers the type
+      from the bound model field.
+    oneOf:
+      - $ref: "#/$defs/TextField"
+      - $ref: "#/$defs/MultilineField"
+      - $ref: "#/$defs/RichTextField"
+      - $ref: "#/$defs/BooleanField"
+      - $ref: "#/$defs/NumberField"
+      - $ref: "#/$defs/SelectField"
+      - $ref: "#/$defs/MultiselectField"
+      - $ref: "#/$defs/DateField"
+      - $ref: "#/$defs/TimeField"
+      - $ref: "#/$defs/DateTimeField"
+      - $ref: "#/$defs/DateRangeField"
+      - $ref: "#/$defs/FileField"
+      - $ref: "#/$defs/RatingField"
+      - $ref: "#/$defs/ColorField"
+      - $ref: "#/$defs/JsonField"
+      - $ref: "#/$defs/SignatureField"
+      - $ref: "#/$defs/LocationField"
+      - $ref: "#/$defs/HiddenField"
+      - $ref: "#/$defs/ComplexField"
+      - $ref: "#/$defs/BoundField"
+
+  # Untyped model-bound field (type inferred from model)
+  BoundField:
+    allOf:
+      - $ref: "#/$defs/FieldBase"
+    unevaluatedProperties: false
+    required: [bind]
+    description: >
+      A field whose type is fully inferred from its model bind path.
+      Explicit validation / display properties may still be added inline.
+    properties:
+      bind:
+        type: string
+        minLength: 1
+
+  # ── TEXT ─────────────────────────────────────────────────────────────────
+  TextField:
+    allOf:
+      - $ref: "#/$defs/FieldBase"
+    unevaluatedProperties: false
+    properties:
+      type:
+        const: text
+      min_length:
+        type: integer
+        minimum: 0
+      max_length:
+        type: integer
+        minimum: 1
+      pattern:
+        type: string
+        description: ECMAScript regex.
+      pattern_message:
+        type: string
+        maxLength: 160
+      autocomplete:
+        type: string
+        description: HTML autocomplete attribute (e.g. name, email, tel, postal-code).
+
+  # ── MULTILINE ─────────────────────────────────────────────────────────────
+  MultilineField:
+    allOf:
+      - $ref: "#/$defs/FieldBase"
+    unevaluatedProperties: false
+    properties:
+      type:
+        const: multiline
+      rows:
+        type: integer
+        minimum: 2
+        maximum: 30
+        default: 4
+      max_length:
+        type: integer
+        minimum: 1
+      resize:
+        type: string
+        enum: [none, vertical, both]
+        default: vertical
+
+  # ── RICHTEXT ──────────────────────────────────────────────────────────────
+  RichTextField:
+    allOf:
+      - $ref: "#/$defs/FieldBase"
+    unevaluatedProperties: false
+    properties:
+      type:
+        const: richtext
+      toolbar:
+        type: array
+        items:
+          type: string
+          enum:
+            - bold
+            - italic
+            - underline
+            - strike
+            - code
+            - heading1
+            - heading2
+            - heading3
+            - bulletList
+            - orderedList
+            - blockquote
+            - codeblock
+            - link
+            - image
+        uniqueItems: true
+      max_length:
+        type: integer
+        minimum: 1
+
+  # ── BOOLEAN ───────────────────────────────────────────────────────────────
+  BooleanField:
+    allOf:
+      - $ref: "#/$defs/FieldBase"
+    unevaluatedProperties: false
+    properties:
+      type:
+        const: boolean
+      display_as:
+        type: string
+        enum: [switch, checkbox, yes-no-radio]
+        default: switch
+      true_label:
+        type: string
+        default: "Yes"
+        maxLength: 40
+      false_label:
+        type: string
+        default: "No"
+        maxLength: 40
+
+  # ── NUMBER ────────────────────────────────────────────────────────────────
+  NumberField:
+    allOf:
+      - $ref: "#/$defs/FieldBase"
+    unevaluatedProperties: false
+    properties:
+      type:
+        const: number
+      number_type:
+        $ref: "#/$defs/NumberType"
+        description: >
+          Semantic numeric format. Guides storage type, formatting, and
+          validation. Overrides decimal_places when both are present.
+      signed:
+        type: boolean
+        default: true
+        description: When false, negative values are rejected.
+      multiple_of:
+        type: number
+        exclusiveMinimum: 0
+        description: Value must be an exact multiple of this number.
+      display_as:
+        type: string
+        enum: [input, slider, stepper]
+        default: input
+      min:
+        type: number
+      max:
+        type: number
+      step:
+        type: number
+        exclusiveMinimum: 0
+        default: 1
+      decimal_places:
+        type: integer
+        minimum: 0
+        maximum: 10
+        default: 0
+      prefix:
+        type: string
+        maxLength: 10
+      suffix:
+        type: string
+        maxLength: 10
+
+  # ── SELECT ────────────────────────────────────────────────────────────────
+  SelectField:
+    allOf:
+      - $ref: "#/$defs/FieldBase"
+    required: [choices]
+    unevaluatedProperties: false
+    properties:
+      type:
+        const: select
+      choices:
+        $ref: "#/$defs/ChoiceSource"
+      display_as:
+        type: string
+        enum: [auto, radio, dropdown, button-group]
+        default: auto
+      allow_others:
+        type: boolean
+        default: false
+        description: Permit a free-text "Other / specify" entry.
+      others_type:
+        type: string
+        enum: [text, number]
+        default: text
+        description: Storage type for the "others" free entry. Used when allow_others=true.
+      option_filter:
+        type: object
+        description: >
+          Client-side JS expression map. Filters which choices are displayed
+          based on sibling field values. "opt" = current option, "fields" = answers.
+        additionalProperties:
+          type: string
+
+  # ── MULTISELECT ───────────────────────────────────────────────────────────
+  MultiselectField:
+    allOf:
+      - $ref: "#/$defs/FieldBase"
+    required: [choices]
+    unevaluatedProperties: false
+    properties:
+      type:
+        const: multiselect
+      choices:
+        $ref: "#/$defs/ChoiceSource"
+      display_as:
+        type: string
+        enum: [auto, checkbox, dropdown, tag-input]
+        default: auto
+      min_selected:
+        type: integer
+        minimum: 0
+        default: 0
+      max_selected:
+        type: integer
+        minimum: 1
+      allow_others:
+        type: boolean
+        default: false
+      others_type:
+        type: string
+        enum: [text, number]
+        default: text
+      option_filter:
+        type: object
+        additionalProperties:
+          type: string
+
+  # ── DATE ──────────────────────────────────────────────────────────────────
+  DateField:
+    allOf:
+      - $ref: "#/$defs/FieldBase"
+    unevaluatedProperties: false
+    properties:
+      type:
+        const: date
+      use_current:
+        type: boolean
+        default: false
+        description: Pre-fill with today's date. Overrides static "default".
+      step_duration_s:
+        type: integer
+        minimum: 1
+        description: Calendar navigation step in seconds (e.g. 86400=day, 604800=week).
+      min_date:
+        $ref: "#/$defs/DateExpression"
+      max_date:
+        $ref: "#/$defs/DateExpression"
+      disable_weekends:
+        type: boolean
+        default: false
+      disable_dates:
+        type: array
+        items:
+          type: string
+          format: date
+      date_format:
+        type: string
+        default: "dd/MM/yyyy"
+
+  # ── TIME ──────────────────────────────────────────────────────────────────
+  TimeField:
+    allOf:
+      - $ref: "#/$defs/FieldBase"
+    unevaluatedProperties: false
+    properties:
+      type:
+        const: time
+      min_time:
+        $ref: "#/$defs/HHmm"
+      max_time:
+        $ref: "#/$defs/HHmm"
+      step_minutes:
+        type: integer
+        minimum: 1
+        maximum: 60
+        default: 15
+      use_24h:
+        type: boolean
+        default: false
+
+  # ── DATETIME ──────────────────────────────────────────────────────────────
+  DateTimeField:
+    allOf:
+      - $ref: "#/$defs/FieldBase"
+    unevaluatedProperties: false
+    properties:
+      type:
+        const: datetime
+      use_current:
+        type: boolean
+        default: false
+        description: Pre-fill with current date+time. Overrides static "default".
+      min_date:
+        $ref: "#/$defs/DateExpression"
+      max_date:
+        $ref: "#/$defs/DateExpression"
+      disable_weekends:
+        type: boolean
+        default: false
+      disable_dates:
+        type: array
+        items:
+          type: string
+          format: date
+      date_format:
+        type: string
+        default: "dd/MM/yyyy"
+      min_time:
+        $ref: "#/$defs/HHmm"
+      max_time:
+        $ref: "#/$defs/HHmm"
+      step_minutes:
+        type: integer
+        minimum: 1
+        maximum: 60
+        default: 15
+      use_24h:
+        type: boolean
+        default: false
+
+  # ── DATERANGE ─────────────────────────────────────────────────────────────
+  DateRangeField:
+    allOf:
+      - $ref: "#/$defs/FieldBase"
+    unevaluatedProperties: false
+    properties:
+      type:
+        const: daterange
+      min_date:
+        $ref: "#/$defs/DateExpression"
+      max_date:
+        $ref: "#/$defs/DateExpression"
+      disable_weekends:
+        type: boolean
+        default: false
+      disable_dates:
+        type: array
+        items:
+          type: string
+          format: date
+      date_format:
+        type: string
+        default: "dd/MM/yyyy"
+      min_range_days:
+        type: integer
+        minimum: 1
+      max_range_days:
+        type: integer
+        minimum: 1
+
+  # ── FILE ──────────────────────────────────────────────────────────────────
+  FileField:
+    allOf:
+      - $ref: "#/$defs/FieldBase"
+    unevaluatedProperties: false
+    properties:
+      type:
+        const: file
+      accept:
+        type: string
+        description: Comma-separated MIME types or extensions. e.g. ".pdf,image/*"
+      max_size_mb:
+        type: number
+        exclusiveMinimum: 0
+        default: 10
+      max_files:
+        type: integer
+        minimum: 1
+        default: 1
+      storage:
+        type: string
+        enum: [memory, base64, tauri-fs]
+        default: memory
+
+  # ── RATING ────────────────────────────────────────────────────────────────
+  RatingField:
+    allOf:
+      - $ref: "#/$defs/FieldBase"
+    unevaluatedProperties: false
+    properties:
+      type:
+        const: rating
+      max:
+        type: integer
+        minimum: 2
+        maximum: 10
+        default: 5
+      display_as:
+        type: string
+        enum: [stars, numeric-scale, emoji-scale]
+        default: stars
+      low_label:
+        type: string
+        maxLength: 40
+        default: "Poor"
+      high_label:
+        type: string
+        maxLength: 40
+        default: "Excellent"
+
+  # ── COLOR ─────────────────────────────────────────────────────────────────
+  ColorField:
+    allOf:
+      - $ref: "#/$defs/FieldBase"
+    unevaluatedProperties: false
+    properties:
+      type:
+        const: color
+      format:
+        type: string
+        enum: [hex, rgba, hsl]
+        default: hex
+      presets:
+        type: array
+        items:
+          type: string
+          pattern: "^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$"
+        maxItems: 24
+
+  # ── JSON ──────────────────────────────────────────────────────────────────
+  JsonField:
+    allOf:
+      - $ref: "#/$defs/FieldBase"
+    unevaluatedProperties: false
+    properties:
+      type:
+        const: json
+      schema:
+        type: object
+        description: Optional inline JSON Schema to validate the entered value.
+      rows:
+        type: integer
+        minimum: 2
+        maximum: 40
+        default: 8
+
+  # ── SIGNATURE ─────────────────────────────────────────────────────────────
+  SignatureField:
+    allOf:
+      - $ref: "#/$defs/FieldBase"
+    unevaluatedProperties: false
+    properties:
+      type:
+        const: signature
+      canvas_width:
+        type: integer
+        minimum: 200
+        maximum: 1200
+        default: 600
+      canvas_height:
+        type: integer
+        minimum: 60
+        maximum: 400
+        default: 160
+      stroke_color:
+        type: string
+        description: Default pen color as a CSS color string.
+
+  # ── LOCATION ──────────────────────────────────────────────────────────────
+  LocationField:
+    allOf:
+      - $ref: "#/$defs/FieldBase"
+    unevaluatedProperties: false
+    properties:
+      type:
+        const: location
+      mode:
+        type: string
+        enum: [coordinates, address-search, map-pin]
+        default: address-search
+      geocoding_source:
+        type: string
+        description: >
+          Name of a manifest data_sources entry used for address search.
+          Replaces the v3 inline geocoding_url.
+
+  # ── HIDDEN ────────────────────────────────────────────────────────────────
+  HiddenField:
+    allOf:
+      - $ref: "#/$defs/FieldBase"
+    required: [value_from]
+    unevaluatedProperties: false
+    properties:
+      type:
+        const: hidden
+      value_from:
+        type: string
+        enum: [default, context, query-param, computed]
+        description: >
+          default     — uses the "default" key on this field.
+          context     — reads from FormContext by context_key.
+          query-param — reads from the URL query string by query_param.
+          computed    — uses the "computed" expression.
+      context_key:
+        type: string
+        description: Required when value_from=context.
+      query_param:
+        type: string
+        description: Required when value_from=query-param.
+
+    if:
+      properties:
+        value_from:
+          const: context
+    then:
+      required: [context_key]
+    else:
+      if:
+        properties:
+          value_from:
+            const: query-param
+      then:
+        required: [query_param]
+
+  # ── COMPLEX ───────────────────────────────────────────────────────────────
+  ComplexField:
+    allOf:
+      - $ref: "#/$defs/FieldBase"
+    required: [complex_schema_id, cardinality]
+    unevaluatedProperties: false
+    properties:
+      type:
+        const: complex
+      complex_schema_id:
+        type: string
+        pattern: "^[a-z][a-z0-9_]*$"
+        description: >
+          ID of an external schema fetched from the schema registry.
+      complex_schema_preview:
+        type: boolean
+        default: true
+      cardinality:
+        type: string
+        enum: [single, list, set, map]
+
+    allOf:
+      - if:
+          properties:
+            cardinality:
+              const: single
+        then:
+          properties:
+            single_render_mode:
+              $ref: "#/$defs/RenderMode"
+            single_required:
+              type: boolean
+              default: true
+
+      - if:
+          properties:
+            cardinality:
+              const: list
+        then:
+          properties:
+            list_min_items:
+              type: integer
+              minimum: 0
+              default: 0
+            list_max_items:
+              type: integer
+              minimum: 1
+            list_sortable:
+              type: boolean
+              default: false
+            list_add_label:
+              type: string
+              default: "Add Item"
+              maxLength: 60
+            list_remove_label:
+              type: string
+              default: "Remove"
+              maxLength: 40
+            list_item_render_mode:
+              $ref: "#/$defs/RenderMode"
+            list_item_title_template:
+              type: string
+              maxLength: 120
+            list_default_expanded:
+              type: boolean
+              default: true
+
+      - if:
+          properties:
+            cardinality:
+              const: set
+        then:
+          required: [set_identity_key]
+          properties:
+            set_identity_key:
+              type: string
+              pattern: "^[a-z][a-z0-9_]*$"
+            set_min_items:
+              type: integer
+              minimum: 0
+              default: 0
+            set_max_items:
+              type: integer
+              minimum: 1
+            set_add_label:
+              type: string
+              default: "Add Item"
+              maxLength: 60
+            set_remove_label:
+              type: string
+              default: "Remove"
+              maxLength: 40
+            set_item_render_mode:
+              $ref: "#/$defs/RenderMode"
+            set_item_title_template:
+              type: string
+              maxLength: 120
+            set_default_expanded:
+              type: boolean
+              default: true
+
+      - if:
+          properties:
+            cardinality:
+              const: map
+        then:
+          required: [map_key_type]
+          properties:
+            map_key_type:
+              type: string
+              enum: [text, select, number, date]
+            map_key_label:
+              type: string
+              default: "Key"
+              maxLength: 40
+            map_key_choices:
+              $ref: "#/$defs/StaticChoiceList"
+            map_key_pattern:
+              type: string
+            map_key_pattern_message:
+              type: string
+              maxLength: 160
+            map_min_entries:
+              type: integer
+              minimum: 0
+              default: 0
+            map_max_entries:
+              type: integer
+              minimum: 1
+            map_value_render_mode:
+              $ref: "#/$defs/RenderMode"
+            map_add_label:
+              type: string
+              default: "Add Entry"
+              maxLength: 60
+            map_remove_label:
+              type: string
+              default: "Remove"
+              maxLength: 40
+            map_default_expanded:
+              type: boolean
+              default: false
+
+          if:
+            properties:
+              map_key_type:
+                const: select
+          then:
+            required: [map_key_choices]
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  COLLECTION                                                              ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  Collection:
+    type: object
+    additionalProperties: false
+    properties:
+      min_items:
+        type: integer
+        minimum: 0
+        default: 0
+      max_items:
+        type: integer
+        minimum: 1
+      add_label:
+        type: string
+        default: "Add Item"
+        maxLength: 60
+      remove_label:
+        type: string
+        default: "Remove"
+        maxLength: 40
+      item_title_template:
+        type: string
+        description: >
+          Handlebars template for the accordion header of each instance.
+          Use {{index}} (1-based) and {{fields.<id>}} for live values.
+        maxLength: 120
+      sortable:
+        type: boolean
+        default: false
+      default_expanded:
+        type: boolean
+        default: true
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  CROSS-FIELD VALIDATION                                                  ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  CrossFieldValidation:
+    type: object
+    required: [fields, rule, message]
+    additionalProperties: false
+    properties:
+      fields:
+        type: array
+        minItems: 2
+        items:
+          type: string
+          pattern: "^[a-z][a-z0-9_]*$"
+      rule:
+        type: string
+        description: Name of a cross-field validator or a manifest validation.rules key.
+        minLength: 1
+      message:
+        type: string
+        maxLength: 200
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  FIELD GROUP (structural constraint)                                     ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  FieldGroup:
+    type: object
+    required: [name, applicable_on, group_type]
+    additionalProperties: false
+    properties:
+      name:
+        type: string
+        pattern: "^[A-Za-z][A-Za-z0-9_]*$"
+        minLength: 1
+        maxLength: 60
+      description:
+        type: string
+        maxLength: 300
+      applicable_on:
+        type: array
+        minItems: 2
+        items:
+          type: string
+          pattern: "^[a-z][a-z0-9_]*$"
+        uniqueItems: true
+      group_type:
+        $ref: "#/$defs/GroupType"
+      message:
+        type: string
+        maxLength: 200
+      index_type:
+        type: string
+        enum: [NonUnique, Unique, Text]
+        description: Only relevant when group_type=Index.
+      tags:
+        type: object
+        additionalProperties:
+          type: string
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  CONDITION SYSTEM                                                        ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  ConditionOrRef:
+    description: >
+      A condition may be defined inline (Condition) or reference a named
+      condition from the manifest conditions registry ({ ref: conditionName }).
+    oneOf:
+      - $ref: "#/$defs/Condition"
+      - $ref: "#/$defs/ConditionRef"
+
+  ConditionRef:
+    type: object
+    required: [ref]
+    additionalProperties: false
+    description: Reference to a named condition in the manifest conditions registry.
+    properties:
+      ref:
+        type: string
+        minLength: 1
+        maxLength: 80
+
+  Condition:
+    oneOf:
+      - $ref: "#/$defs/SimpleCondition"
+      - $ref: "#/$defs/CompositeCondition"
+      - $ref: "#/$defs/ExpressionCondition"
+
+  SimpleCondition:
+    type: object
+    required: [field, op]
+    additionalProperties: false
+    properties:
+      field:
+        type: string
+        pattern: "^[a-z][a-z0-9_]*$"
+      op:
+        type: string
+        enum:
+          - eq
+          - neq
+          - in
+          - not_in
+          - gt
+          - gte
+          - lt
+          - lte
+          - contains
+          - starts_with
+          - is_empty
+          - is_not_empty
+          - is_true
+          - is_false
+      value:
+        description: RHS value. Required for eq/neq/gt/gte/lt/lte/contains/starts_with/in/not_in.
+
+    if:
+      properties:
+        op:
+          enum: [eq, neq, gt, gte, lt, lte, contains, starts_with, in, not_in]
+    then:
+      required: [field, op, value]
+
+  CompositeCondition:
+    type: object
+    additionalProperties: false
+    oneOf:
+      - required: [all]
+        properties:
+          all:
+            type: array
+            minItems: 1
+            items:
+              $ref: "#/$defs/Condition"
+      - required: [any]
+        properties:
+          any:
+            type: array
+            minItems: 1
+            items:
+              $ref: "#/$defs/Condition"
+      - required: [not]
+        properties:
+          not:
+            $ref: "#/$defs/Condition"
+
+  ExpressionCondition:
+    type: object
+    required: [expression]
+    additionalProperties: false
+    description: >
+      Inline formula expression condition. Access fields via fields.*,
+      context via context.*. Must evaluate to boolean.
+    properties:
+      expression:
+        type: string
+        minLength: 1
+        maxLength: 1000
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  BRANCH  (active navigation jump)                                        ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  Branch:
+    type: object
+    required: [when, goTo]
+    additionalProperties: false
+    properties:
+      when:
+        $ref: "#/$defs/ConditionOrRef"
+      goTo:
+        type: object
+        additionalProperties: false
+        properties:
+          page:
+            type: string
+            pattern: "^[a-z][a-z0-9_]*$"
+          section:
+            type: string
+            pattern: "^[a-z][a-z0-9_]*$"
+          field:
+            type: string
+            pattern: "^[a-z][a-z0-9_]*$"
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  ACTION REF                                                              ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  ActionRef:
+    description: >
+      Inline action or reference to a named manifest action.
+    oneOf:
+      - type: object
+        required: [ref]
+        additionalProperties: false
+        properties:
+          ref:
+            type: string
+          params:
+            type: object
+            additionalProperties: true
+      - type: object
+        required: [action_type]
+        additionalProperties: false
+        properties:
+          action_type:
+            type: string
+            enum: [set_field, show_section, hide_section, navigate,
+                   api_call, emit_event, custom]
+          params:
+            type: object
+            additionalProperties: true
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  VALIDATION  (per-field inline)                                          ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  Validation:
+    type: object
+    additionalProperties: false
+    description: >
+      Inline validation constraints for a field. Rules may also reference
+      named entries from the manifest validation.rules registry via rule_ref.
+    properties:
+      rule_ref:
+        type: string
+        description: Name of a manifest validation.rules entry to apply first.
+      required_message:
+        type: string
+        maxLength: 160
+      min_length:
+        type: integer
+        minimum: 0
+      min_length_message:
+        type: string
+        maxLength: 160
+      max_length:
+        type: integer
+        minimum: 1
+      max_length_message:
+        type: string
+        maxLength: 160
+      pattern:
+        type: string
+      pattern_message:
+        type: string
+        maxLength: 160
+      min:
+        type: number
+      min_message:
+        type: string
+        maxLength: 160
+      max:
+        type: number
+      max_message:
+        type: string
+        maxLength: 160
+      min_date:
+        type: string
+      min_date_message:
+        type: string
+        maxLength: 160
+      max_date:
+        type: string
+      max_date_message:
+        type: string
+        maxLength: 160
+      min_selected:
+        type: integer
+        minimum: 0
+      max_selected:
+        type: integer
+        minimum: 1
+      custom:
+        type: string
+        description: Name of a synchronous validator on <FormEngine /> validators prop.
+      custom_message:
+        type: string
+        maxLength: 160
+      async:
+        type: string
+        description: Name of an async validator on <FormEngine /> validators prop.
+      async_message:
+        type: string
+        maxLength: 160
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  CHOICE SOURCE                                                           ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  ChoiceSource:
+    type: object
+    additionalProperties: false
+    description: >
+      Exactly one of "static", "dynamic", or "source_ref" must be present.
+    oneOf:
+      - required: [static]
+        properties:
+          static:
+            $ref: "#/$defs/StaticChoiceList"
+      - required: [dynamic]
+        properties:
+          dynamic:
+            $ref: "#/$defs/DynamicChoicesConfig"
+      - required: [source_ref]
+        properties:
+          source_ref:
+            type: string
+            description: >
+              Name of a manifest data_sources entry.
+              Replaces inline DynamicChoicesConfig for reusable data sources.
+            minLength: 1
+
+  StaticChoiceList:
+    type: array
+    minItems: 1
+    items:
+      $ref: "#/$defs/StaticChoice"
+
+  StaticChoice:
+    type: object
+    required: [value, label]
+    additionalProperties: false
+    properties:
+      value:
+        oneOf:
+          - type: string
+          - type: integer
+          - type: boolean
+      label:
+        type: string
+        maxLength: 120
+      group:
+        type: string
+        maxLength: 60
+      icon:
+        type: string
+        maxLength: 50
+      disabled:
+        type: boolean
+        default: false
+
+  DynamicChoicesConfig:
+    type: object
+    required: [url, value_key, label_key]
+    additionalProperties: false
+    description: >
+      Inline dynamic choices config. For reuse across fields, define a
+      manifest data_sources entry and reference it via source_ref instead.
+    properties:
+      url:
+        type: string
+        minLength: 1
+      method:
+        type: string
+        enum: [GET, POST]
+        default: GET
+      headers:
+        type: object
+        additionalProperties:
+          type: string
+      query_params:
+        type: object
+        additionalProperties:
+          type: string
+      body_template:
+        type: [string, "null"]
+      response_path:
+        type: string
+        default: ""
+      value_key:
+        type: string
+        minLength: 1
+      label_key:
+        type: string
+        minLength: 1
+      group_key:
+        type: string
+      search_param:
+        type: string
+      depends_on:
+        type: string
+        pattern: "^[a-z][a-z0-9_]*$"
+      cache_ttl_seconds:
+        type: integer
+        minimum: 0
+        default: 300
+      option_filter:
+        type: object
+        additionalProperties:
+          type: string
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  SUBMIT ACTION                                                           ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  SubmitAction:
+    type: object
+    required: [type]
+    additionalProperties: false
+    properties:
+      type:
+        type: string
+        enum: [rest, local, none]
+      success_message:
+        type: string
+        default: "Form submitted successfully!"
+        maxLength: 300
+      error_message:
+        type: string
+        default: "Submission failed. Please try again."
+        maxLength: 300
+
+    if:
+      properties:
+        type:
+          const: rest
+    then:
+      required: [url]
+      properties:
+        url:
+          type: string
+          minLength: 1
+        method:
+          type: string
+          enum: [POST, PUT, PATCH]
+          default: POST
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        transform_handler:
+          type: string
+    else:
+      if:
+        properties:
+          type:
+            const: local
+      then:
+        required: [handler_name]
+        properties:
+          handler_name:
+            type: string
+            minLength: 1
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  SCALAR ENUMS                                                            ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+
+  ConfidentialityType:
+    type: string
+    enum: [Public, Internal, Confidential, Restricted, Secret]
+    description: >
+      Public      — visible to all authenticated users.
+      Internal    — internal staff only.
+      Confidential — owning team / role only.
+      Restricted  — named individuals only.
+      Secret      — system processes only; never rendered in UI.
+
+  EditabilityType:
+    type: string
+    enum: [Mutable, MutableIfNull, Immutable, Generated]
+    description: >
+      Mutable      — always editable.
+      MutableIfNull — editable only while the stored value is null/empty.
+      Immutable    — read-only after first save.
+      Generated    — auto-filled by system; never a user input.
+
+  NumberType:
+    type: string
+    enum: [int, long, float, double, decimal2, decimal4, decimal6, NPS]
+    description: >
+      int/long     — integers (32/64-bit).
+      float/double — floating point (32/64-bit).
+      decimal2/4/6 — fixed decimal (2, 4, or 6 places).
+      NPS          — Net Promoter Score 0–10.
+
+  FormState:
+    type: string
+    enum: [draft, active, deprecated, archived]
+    description: >
+      draft      — not yet published.
+      active     — live and accepting submissions.
+      deprecated — superseded; submissions still accepted.
+      archived   — closed; no new submissions.
+
+  GroupType:
+    type: string
+    enum: [OneOf, AnyOf, AllOf, Index]
+    description: >
+      OneOf — exactly one field in the group may be non-empty.
+      AnyOf — at least one must be non-empty.
+      AllOf — all must be non-empty together.
+      Index — listed fields form a composite index.
+
+  RenderMode:
+    type: string
+    enum: [inline, modal, panel]
+    default: inline
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  FORMULA DEFAULT                                                         ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  FormulaDefault:
+    type: object
+    required: [expression]
+    additionalProperties: false
+    description: >
+      Expression-based default value evaluated at form initialisation.
+      Takes precedence over the static "default" key.
+    properties:
+      expression:
+        type: string
+        minLength: 1
+        maxLength: 500
+        description: >
+          Examples: now(), today(), context.userId, fields.quantity * 1.1
+      operator:
+        type: string
+        maxLength: 40
+      values:
+        type: array
+        items:
+          type: string
+        maxItems: 20
+      parameters:
+        type: array
+        items:
+          type: string
+        maxItems: 20
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  DATE / TIME PRIMITIVES                                                  ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  DateExpression:
+    type: string
+    description: >
+      ISO 8601 date (YYYY-MM-DD) or relative expression:
+        today, today+7d, today-18y, today+6m
+      Units: d=days, m=months, y=years.
+    pattern: "^(\\d{4}-\\d{2}-\\d{2}|today([+-]\\d+[dmy])?)$"
+
+  HHmm:
+    type: string
+    description: 24-hour time in HH:mm format.
+    pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
+    examples:
+      - "09:00"
+      - "17:30"

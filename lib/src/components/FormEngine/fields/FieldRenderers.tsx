@@ -8,6 +8,114 @@ import type {
 } from "../../../libs/types";
 import { cn } from "../../../libs/utils";
 
+// ─── Dynamic choices config (mirrors DynamicChoicesConfig in schema) ──────────
+interface DynamicChoicesConfig {
+  url: string;
+  method?: "GET" | "POST";
+  headers?: Record<string, string>;
+  response_path?: string;
+  value_key: string;
+  label_key: string;
+  group_key?: string;
+  cache_ttl_seconds?: number;
+}
+
+// Simple in-memory cache for dynamic choices
+const _choicesCache: Record<string, { data: StaticChoice[]; ts: number }> = {};
+
+/**
+ * Fetch choices from a dynamic data source.
+ * Handles both absolute URLs and relative paths (prefixed with NEXT_PUBLIC_API_URL).
+ */
+function useDynamicChoices(config: DynamicChoicesConfig | null): {
+  choices: StaticChoice[];
+  loading: boolean;
+  error: string | null;
+} {
+  const [choices, setChoices] = React.useState<StaticChoice[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const cacheKey = config ? `${config.url}|${config.value_key}|${config.label_key}` : "";
+  const ttl = (config?.cache_ttl_seconds ?? 60) * 1000;
+
+  React.useEffect(() => {
+    if (!config?.url) return;
+
+    // Check cache
+    const cached = _choicesCache[cacheKey];
+    if (cached && Date.now() - cached.ts < ttl) {
+      setChoices(cached.data);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    const apiBase =
+      typeof process !== "undefined"
+        ? (process.env?.NEXT_PUBLIC_API_URL ?? "http://localhost:8000")
+        : "http://localhost:8000";
+
+    const url = config.url.startsWith("http") ? config.url : `${apiBase}${config.url}`;
+
+    fetch(url, {
+      method: config.method ?? "GET",
+      headers: config.headers,
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((data) => {
+        // Traverse response_path (e.g. "data.items")
+        let items: unknown = data;
+        if (config.response_path) {
+          for (const part of config.response_path.split(".")) {
+            items = (items as Record<string, unknown>)?.[part];
+          }
+        }
+        if (!Array.isArray(items)) items = [];
+        const mapped = (items as Record<string, unknown>[]).map((item) => ({
+          value: String(item[config.value_key] ?? ""),
+          label: String(item[config.label_key] ?? item[config.value_key] ?? ""),
+          group: config.group_key ? String(item[config.group_key] ?? "") : undefined,
+        }));
+        _choicesCache[cacheKey] = { data: mapped, ts: Date.now() };
+        setChoices(mapped);
+      })
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoading(false));
+  }, [cacheKey, ttl]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return { choices, loading, error };
+}
+
+/**
+ * Inspect a field's `choices` prop and return the static list (if any).
+ * Handles three formats:
+ *   1. Raw array         (legacy / most YAML files use this)
+ *   2. { static: [...] } (schema-conformant)
+ *   3. { dynamic: {...} } / { source_ref: "..." }  → not static, returns []
+ */
+function resolveStaticChoices(choices: unknown): StaticChoice[] {
+  if (!choices) return [];
+  if (Array.isArray(choices)) return choices as StaticChoice[];
+  const c = choices as Record<string, unknown>;
+  if (Array.isArray(c.static)) return c.static as StaticChoice[];
+  return [];
+}
+
+/**
+ * Extract the DynamicChoicesConfig from a field's `choices` prop, if present.
+ */
+function getDynamicConfig(choices: unknown): DynamicChoicesConfig | null {
+  if (!choices || Array.isArray(choices)) return null;
+  const c = choices as Record<string, unknown>;
+  if (c.dynamic && typeof c.dynamic === "object") return c.dynamic as DynamicChoicesConfig;
+  return null;
+}
+
 // ─── Shared Field Wrapper ─────────────────────────────────────────────────────
 interface FieldWrapperProps {
   label?: string;
@@ -286,18 +394,39 @@ export function NumberFieldRenderer({ field, value, onChange, onBlur, errors, di
 }
 
 // ─── Select Field ─────────────────────────────────────────────────────────────
-function resolveChoices(choices: unknown): StaticChoice[] {
-  if (!Array.isArray(choices)) return [];
-  return choices as StaticChoice[];
-}
-
 export function SelectFieldRenderer({ field, value, onChange, onBlur, errors, disabled }: FieldProps<SelectField>) {
   const f = field as SelectField;
-  const choices = resolveChoices(f.choices);
+  const dynamicConfig = getDynamicConfig(f.choices);
+  const { choices: dynamicChoices, loading, error: fetchError } = useDynamicChoices(dynamicConfig);
+  const staticChoices = resolveStaticChoices(f.choices);
+  const choices = dynamicConfig ? dynamicChoices : staticChoices;
   const displayAs = f.display_as ?? "auto";
   const useRadio = displayAs === "radio" || (displayAs === "auto" && choices.length <= 4);
 
-  if (displayAs === "button-group" || (displayAs === "auto" && choices.length <= 3)) {
+  // ── Dynamic loading / error states ───────────────────────────────────────
+  if (loading) {
+    return (
+      <FieldWrapper label={f.label} required={f.required} hint={f.hint}
+        description={f.description} errors={errors} width={f.width}>
+        <div className="flex items-center gap-2 h-10 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-sm text-gray-400">
+          <span className="h-3.5 w-3.5 rounded-full border-2 border-gray-300 border-t-blue-500 animate-spin flex-shrink-0" />
+          Loading options…
+        </div>
+      </FieldWrapper>
+    );
+  }
+  if (fetchError) {
+    return (
+      <FieldWrapper label={f.label} required={f.required} hint={f.hint}
+        description={f.description} errors={[...(errors ?? []), `Could not load options: ${fetchError}`]} width={f.width}>
+        <div className="h-10 px-3 rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 flex items-center text-sm text-red-500">
+          ⚠ Failed to load options
+        </div>
+      </FieldWrapper>
+    );
+  }
+
+  if (displayAs === "button-group" || (displayAs === "auto" && !dynamicConfig && choices.length <= 3)) {
     return (
       <FieldWrapper label={f.label} required={f.required} hint={f.hint}
         description={f.description} errors={errors} width={f.width}>
@@ -325,7 +454,7 @@ export function SelectFieldRenderer({ field, value, onChange, onBlur, errors, di
     );
   }
 
-  if (useRadio) {
+  if (useRadio && !dynamicConfig) {
     return (
       <FieldWrapper label={f.label} required={f.required} hint={f.hint}
         description={f.description} errors={errors} width={f.width}>
@@ -350,28 +479,33 @@ export function SelectFieldRenderer({ field, value, onChange, onBlur, errors, di
     );
   }
 
+  // Default: dropdown (always used for dynamic sources)
+  const selectedLabel = choices.find(c => String(c.value) === String(value))?.label;
   return (
     <FieldWrapper label={f.label} required={f.required} hint={f.hint}
       description={f.description} errors={errors} width={f.width}>
-      <select
-        value={String(value ?? "")}
-        onChange={e => onChange(e.target.value || null)}
-        onBlur={onBlur}
-        disabled={disabled || f.disabled}
-        className={cn(
-          "w-full rounded-lg border px-3 py-2 text-sm bg-white",
-          "border-gray-300 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20",
-          "dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100",
-          errors?.length && "border-red-400"
-        )}
-      >
-        <option value="">{f.placeholder ?? "— Select —"}</option>
-        {choices.map(choice => (
-          <option key={String(choice.value)} value={String(choice.value)} disabled={choice.disabled}>
-            {choice.label}
-          </option>
-        ))}
-      </select>
+      <div className="relative">
+        <select
+          value={String(value ?? "")}
+          onChange={e => onChange(e.target.value || null)}
+          onBlur={onBlur}
+          disabled={disabled || f.disabled}
+          className={cn(
+            "w-full rounded-lg border px-3 py-2 text-sm bg-white appearance-none pr-8",
+            "border-gray-300 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20",
+            "dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100",
+            errors?.length && "border-red-400"
+          )}
+        >
+          <option value="">{f.placeholder ?? "— Select —"}</option>
+          {choices.map(choice => (
+            <option key={String(choice.value)} value={String(choice.value)} disabled={choice.disabled}>
+              {choice.label}
+            </option>
+          ))}
+        </select>
+        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">▾</span>
+      </div>
     </FieldWrapper>
   );
 }
@@ -379,7 +513,9 @@ export function SelectFieldRenderer({ field, value, onChange, onBlur, errors, di
 // ─── Multiselect Field ────────────────────────────────────────────────────────
 export function MultiselectFieldRenderer({ field, value, onChange, errors, disabled }: FieldProps<MultiselectField>) {
   const f = field as MultiselectField;
-  const choices = resolveChoices(f.choices);
+  const dynamicConfig = getDynamicConfig(f.choices);
+  const { choices: dynamicChoices, loading: dynLoading, error: dynError } = useDynamicChoices(dynamicConfig);
+  const choices = dynamicConfig ? dynamicChoices : resolveStaticChoices(f.choices);
   const selected: (string | number)[] = Array.isArray(value) ? (value as (string | number)[]) : [];
   const displayAs = f.display_as ?? "auto";
 
@@ -387,6 +523,28 @@ export function MultiselectFieldRenderer({ field, value, onChange, errors, disab
     if (selected.includes(v)) onChange(selected.filter(x => x !== v));
     else onChange([...selected, v]);
   };
+
+  if (dynLoading) {
+    return (
+      <FieldWrapper label={f.label} required={f.required} hint={f.hint}
+        description={f.description} errors={errors} width={f.width}>
+        <div className="flex items-center gap-2 h-10 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-sm text-gray-400">
+          <span className="h-3.5 w-3.5 rounded-full border-2 border-gray-300 border-t-blue-500 animate-spin flex-shrink-0" />
+          Loading options…
+        </div>
+      </FieldWrapper>
+    );
+  }
+  if (dynError) {
+    return (
+      <FieldWrapper label={f.label} required={f.required} hint={f.hint}
+        description={f.description} errors={[...(errors ?? []), `Could not load options: ${dynError}`]} width={f.width}>
+        <div className="h-10 px-3 rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 flex items-center text-sm text-red-500">
+          ⚠ Failed to load options
+        </div>
+      </FieldWrapper>
+    );
+  }
 
   if (displayAs === "tag-input") {
     return (

@@ -226,13 +226,32 @@ class StaticChoiceWrapper(BaseModel):
     """Handles: choices: { static: [...] }"""
     static: List[StaticChoice]
 
+class DynamicChoicesWrapper(BaseModel):
+    """Handles: choices: { dynamic: { url, value_key, label_key, ... } }
+    This is the schema-conformant form (ChoiceSource.dynamic branch)."""
+    dynamic: DynamicChoicesConfig
+
 class SourceRefConfig(BaseModel):
     """Handles: choices: { source_ref: 'data_source_name' }"""
     source_ref: str
 
 # ChoiceSource accepts all forms the schema allows:
-#   bare list, source_ref shorthand, static wrapper, inline dynamic, plain string
-ChoiceSource = Union[List[StaticChoice], SourceRefConfig, StaticChoiceWrapper, DynamicChoicesConfig, str]
+#   { dynamic: {...} }  — schema-conformant dynamic wrapper  (most specific, check first)
+#   { source_ref: "x" } — named manifest data source ref
+#   { static: [...] }   — explicit static wrapper
+#   [...]               — bare list (legacy / most common in sample forms)
+#   DynamicChoicesConfig — inline flat form (kept for backward compat)
+#   str                 — plain string alias (rarely used)
+# NOTE: DynamicChoicesWrapper must appear before DynamicChoicesConfig in the union
+# so Pydantic matches { dynamic: {...} } as a wrapper, not as a flat config dict.
+ChoiceSource = Union[
+    DynamicChoicesWrapper,
+    SourceRefConfig,
+    StaticChoiceWrapper,
+    List[StaticChoice],
+    DynamicChoicesConfig,
+    str,
+]
 
 
 # ─── Submit Action ─────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useEffect, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { api } from "@form-engine/libs/api";
 import { FormEngine } from "@form-engine/components/FormEngine";
@@ -9,10 +9,18 @@ import { FormErrorBoundary } from "@form-engine/components/FormEngine/FormErrorB
 import type { FormManifest, FieldAnswers } from "@form-engine/libs/types";
 import { toast } from "sonner";
 
-export default function CreateFormPage() {
+function CreateFormPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const categoryParam = searchParams.get("category");
+
   const [manifest, setManifest] = useState<FormManifest | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Pre-fill manifest_id if a category was passed via URL
+  const initialAnswers: FieldAnswers | undefined = categoryParam
+    ? { manifest_id: categoryParam }
+    : undefined;
 
   useEffect(() => {
     api.getManifest("form_creator")
@@ -22,8 +30,6 @@ export default function CreateFormPage() {
   }, []);
 
   const handleSubmit = async (payload: FieldAnswers) => {
-    // The form engine posts to /api/create-form via on_submit.url.
-    // We intercept the raw payload here to get the redirect URL from the response.
     try {
       const res = await fetch("/api/create-form", {
         method: "POST",
@@ -41,7 +47,6 @@ export default function CreateFormPage() {
         description: `Redirecting to your new form…`,
       });
 
-      // Give the toast time to show before navigating
       setTimeout(() => router.push(data.url), 800);
     } catch (e) {
       toast.error("Network error — could not reach the server");
@@ -49,10 +54,9 @@ export default function CreateFormPage() {
   };
 
   const handleDraftSave = async (answers: FieldAnswers) => {
-    //TODO: Implement draft saving for the create form. This is a bit tricky since the form doesn't exist yet and we don't have a form_id to associate the draft with. One option is to save the draft in localStorage with a temporary ID, and then clear it on successful submission. For now, we'll just show a success toast without actually saving.
     toast.success("Draft saved");
     throw new Error("Function not implemented.");
-  }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
@@ -62,6 +66,14 @@ export default function CreateFormPage() {
           <div className="flex items-center gap-2 text-sm text-gray-500">
             <Link href="/" className="hover:text-blue-600 transition-colors">⬅ Categories</Link>
             <span>/</span>
+            {categoryParam && (
+              <>
+                <span className="font-mono text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">
+                  {categoryParam}
+                </span>
+                <span>/</span>
+              </>
+            )}
             <span className="font-semibold text-gray-800 dark:text-gray-100">Form Builder</span>
           </div>
           <Link href="/builder"
@@ -78,12 +90,18 @@ export default function CreateFormPage() {
             <span className="text-4xl">⚡</span>
             <div>
               <h1 className="text-xl font-bold text-gray-900 dark:text-white">Form Builder</h1>
-              <p className="mt-1 text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
-                Fill out the steps below to create a new form — no code required.
-                Your form will be rendered instantly by the same Form Engine.
-                Fields marked <span className="font-medium text-blue-700">▶ More options</span> hide
-                advanced configuration like validation patterns, hints, and layout width.
-              </p>
+              {categoryParam ? (
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+                  Adding a new form to category{" "}
+                  <span className="font-semibold text-blue-700 dark:text-blue-300">{categoryParam}</span>.
+                  The category is pre-selected — you can change it below if needed.
+                </p>
+              ) : (
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+                  Fill out the steps below to create a new form — no code required.
+                  Your form will be rendered instantly by the same Form Engine.
+                </p>
+              )}
               <div className="mt-3 flex gap-3 text-xs text-gray-500">
                 <span className="flex items-center gap-1">✅ Live preview in builder</span>
                 <span className="flex items-center gap-1">✅ Wizard or single-page</span>
@@ -119,6 +137,7 @@ export default function CreateFormPage() {
               <FormEngine
                 manifest={manifest}
                 formId="create_form"
+                initialAnswers={initialAnswers}
                 onSubmit={handleSubmit}
                 onDraftSave={handleDraftSave}
               />
@@ -134,5 +153,17 @@ export default function CreateFormPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function CreateFormPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen">
+        <span className="h-8 w-8 rounded-full border-2 border-gray-300 border-t-blue-500 animate-spin" />
+      </div>
+    }>
+      <CreateFormPageInner />
+    </Suspense>
   );
 }
