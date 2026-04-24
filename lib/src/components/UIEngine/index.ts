@@ -1,0 +1,48 @@
+/**
+ * UIEngine Main Export
+ * Core UI rendering engine aligned with ui_design.yaml
+ */
+
+export * from './types';
+export {
+  UIEngineContext,
+  UIEngineProvider,
+  createInitialState,
+  uiEngineReducer,
+  // Hooks
+  useUIEngine,
+  useCurrentScreen,
+  useComponent,
+  useButton,
+  useIcon,
+  useTheme,
+  useBreakpoint,
+  useNavigation,
+  useComponentState,
+  useFeatureGate,
+  useAccessControl,
+  useConditionEvaluator,
+  useResponsiveValue,
+  useTransition,
+  useToast,
+  useDialog,
+} from './context';
+
+export {
+  LoadingIndicator,
+  EmptyStateRenderer,
+  ErrorStateRenderer,
+  ComponentRenderer,
+  type ComponentRendererProps,
+} from './renderers';
+
+export {
+  LayoutContainer,
+  ScreenLayout,
+  ResponsiveLayout,
+  SubComponentPlacementRenderer,
+  type LayoutProps,
+} from './layout';
+
+// Import and re-export UIBuilder component
+export { UIBuilder } from '../UIBuilder';

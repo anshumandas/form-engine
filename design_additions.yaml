@@ -1,0 +1,1036 @@
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  06_ui_design_additions.yaml  —  patch to v1.0.0                           ║
+# ║                                                                              ║
+# ║  Source analysis: 01_core · 02_schemata · 03_uam · 04_workflow · 06_utils  ║
+# ║                                                                              ║
+# ║  This file lists every change to be merged into 06_ui_design.yaml.         ║
+# ║  Each block is tagged with its source namespace for traceability.           ║
+# ║                                                                              ║
+# ║  DECISION LOG — what was included and why                                   ║
+# ║  ─────────────────────────────────────────────────────────────────────────  ║
+# ║  INCLUDED                                                                   ║
+# ║    schemata  UIPersistenceType  — every component needs a caching policy   ║
+# ║    schemata  ChoiceRenderType   — how enum/choice fields render in UI       ║
+# ║    schemata  SectionType        — section break markers in schema forms     ║
+# ║    schemata  SchemaTagType      — tags with direct UI rendering impact      ║
+# ║    schemata  DataType widget map— auto-selects default widget per type      ║
+# ║    core      DataState          — record lifecycle badge on every component ║
+# ║    core      ChangeType         — feeds the audit trail component           ║
+# ║    workflow  WorkflowActionType — buttons in workflow-aware components      ║
+# ║    workflow  WorkItemState      — state badge on work item records          ║
+# ║    workflow  WorkType           — gates which action buttons are shown      ║
+# ║    workflow  ScheduleType       — TAT / reminder countdown display          ║
+# ║    utils     DurationType       — millisec values behind schedule display   ║
+# ║    utils     OperatorType       — filter/condition builder UI operators     ║
+# ║    utils     Pattern            — validation hint icons on input fields     ║
+# ║    utils     File + Picture     — FileUpload and ImageGallery components    ║
+# ║    uam       Role.preferences   — per-role UI preference overrides         ║
+# ║    uam       User.profiles      — avatar / display-name config             ║
+# ║                                                                              ║
+# ║  EXCLUDED (with reasons)                                                    ║
+# ║    core   Data/DataRef/Embedded/Event/Summaried — data-layer interfaces,   ║
+# ║           not UI concerns; already referenced via schema_ref                ║
+# ║    core   ChangeRequest         — server API shape, not UI config           ║
+# ║    schemata Schema/Field/Relationship/Group — already referenced via       ║
+# ║           schema_ref on Component; no new UI-layer config needed            ║
+# ║    schemata SchemaType/RelationshipType/ContainerType/IndexType —          ║
+# ║           data-modelling enums; no UI rendering decision depends on them   ║
+# ║    schemata SchemaState         — schema admin UIs are out of scope        ║
+# ║    utils   City/State/Country/Pin — pure data sets; only the component     ║
+# ║           type 'LocationPicker' (new) is UI-relevant, not the sets         ║
+# ║    utils   App                  — runtime config, not UI design config     ║
+# ║    utils   DataAndErrorsResponse/GetByIdResponse — API contract shapes;    ║
+# ║           acknowledged in DataBinding.response_shape (string ref only)     ║
+# ║    uam     Team/User/Role/Login/Auth — data entities; only their derived   ║
+# ║           UI sub-structures (profiles, preferences) are relevant           ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SECTION 1 — AMENDMENTS TO EXISTING TOP-LEVEL PROPERTIES
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── 1a. Expand the allowed namespace set ────────────────────────────────────
+# ADD  'workflow' and 'utils' to the namespaces enum so cross-namespace $refs
+# from those files are resolvable.
+#
+# CHANGE in 06_ui_design.yaml → properties.namespaces.items.enum:
+#   OLD:  [core, schemata, uam, form, ui]
+#   NEW:  [core, schemata, uam, form, workflow, utils, ui]
+#
+# SOURCE: 04_workflow.yaml, 06_utils.yaml
+
+# ── 1b. New top-level section: widget_map ────────────────────────────────────
+# ADD after the 'transitions' section.
+# SOURCE: 02_schemata.yaml — DataType.tags.ui tagValues
+
+properties_additions:
+
+  widget_map:
+    type: object
+    additionalProperties: false
+    description: >
+      Maps schemata#DataType values to the default widget component name used
+      when auto-rendering a schema-driven form or table column.
+      Derived from the schemata#DataType.tags.ui tagValues; can be overridden
+      per-component via Component.field_widget_overrides.
+
+      Defaults reflect the tagValues column in 02_schemata.yaml:
+        enum          → EnumFormField
+        choice        → ChoiceFormField   (further refined by ChoiceRenderType)
+        string        → TextFormField
+        multiLineText → MultiLineTextFormField
+        number        → NumberFormField
+        boolean       → TristateCheckboxFormField
+        date          → DatePickerFormField
+        any           → AnyFormField
+        id            → TextFormField
+    properties:
+      enum:
+        type: string
+        default: EnumFormField
+      choice:
+        type: string
+        default: ChoiceFormField
+      string:
+        type: string
+        default: TextFormField
+      multiLineText:
+        type: string
+        default: MultiLineTextFormField
+      number:
+        type: string
+        default: NumberFormField
+      boolean:
+        type: string
+        default: TristateCheckboxFormField
+      date:
+        type: string
+        default: DatePickerFormField
+      any:
+        type: string
+        default: AnyFormField
+      id:
+        type: string
+        default: TextFormField
+      secret:
+        type: string
+        default: PasswordFormField
+      reference:
+        type: string
+        default: SearchPickerFormField
+
+  # SOURCE: 03_uam.yaml — uam#Role.preferences (Map<string>)
+  role_preferences:
+    type: object
+    description: >
+      Per-role UI preference overrides. Keys are uam#Role.roleName values.
+      At runtime the engine merges the matching entry on top of the manifest
+      defaults. Allows a role (e.g. Customer vs Employee) to get a different
+      theme, default locale, or column visibility without a separate manifest.
+    additionalProperties:
+      $ref: "#/$defs/RolePreferenceOverride"
+
+  # SOURCE: core#DataState + workflow#WorkItemState
+  state_indicators:
+    type: object
+    description: >
+      Named state-badge definitions. Components reference these by key in
+      Component.state_indicator_ref to display record lifecycle state.
+      Two canonical keyspaces:
+        data.*     — driven by core#DataState values
+        workitem.* — driven by workflow#WorkItemState values
+    additionalProperties:
+      $ref: "#/$defs/StateIndicator"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SECTION 2 — AMENDMENTS TO EXISTING $defs
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── 2a. ComponentType — add new values ──────────────────────────────────────
+# SOURCE: 04_workflow.yaml, 06_utils.yaml, 03_uam.yaml
+
+# CHANGE in 06_ui_design.yaml → $defs.ComponentType.enum:
+#   ADD to the existing enum list:
+#     WorkflowInbox   — list of WorkItems assigned to / created by current user
+#     WorkflowDetail  — single WorkItem with stage actions and comments
+#     CommentThread   — discussion thread on a record or work item
+#     AuditTrail      — change-history log for a record (core#Audited)
+#     FileGallery     — attachment viewer for utils#File / utils#Picture
+#     FilterBuilder   — visual condition builder (utils#OperatorType)
+#     LocationPicker  — city / state / country / pin selection
+#     Avatar          — user identity display (uam#User.profiles)
+#     StateBadge      — standalone record-state indicator chip
+
+# ── 2b. ButtonActionType — add workflow actions ──────────────────────────────
+# SOURCE: 04_workflow.yaml — WorkflowActionType
+
+# CHANGE in 06_ui_design.yaml → $defs.ButtonActionType.enum:
+#   ADD:
+#     Approve, EditApprove, Reject, Forward, Return, Recall,
+#     Accept, Assign, Unassign, Unaccept, Escalate, Stop
+#
+# These map 1-to-1 to workflow#WorkflowActionType choices.
+# When on_press is one of these, the runtime calls the workflow engine
+# with the matching action rather than the form engine.
+
+# ── 2c. Component — add new optional properties ──────────────────────────────
+# SOURCE: schemata, workflow, utils, uam
+
+# ADD these fields to $defs.Component.properties:
+
+component_property_additions:
+
+  # SOURCE: schemata#UIPersistence
+  ui_persistence:
+    $ref: "#/$defs/UIPersistenceType"
+    description: >
+      Caching/persistence strategy for this component's data.
+      Overrides the manifest-level default.
+        LRU          — least-recently-used cache; evicted when cache fills.
+        Session      — cleared on session end (tab/app close).
+        Profile      — persisted per user profile across sessions.
+        AppFirstLoad — loaded once on first app launch; static thereafter.
+        InApp        — in-memory only; lost on component unmount.
+
+  # SOURCE: schemata#ChoiceType
+  choice_render:
+    $ref: "#/$defs/ChoiceRenderType"
+    description: >
+      How choice / enum fields are rendered inside this component.
+      Overrides the field-level default derived from schemata#ChoiceType.
+
+  # SOURCE: core#DataState + workflow#WorkItemState
+  state_indicator_ref:
+    type: string
+    description: >
+      Key from manifest state_indicators map. When set, the component renders
+      a state badge driven by the record's dataState (core#DataState) or
+      workItemState (workflow#WorkItemState) field.
+    maxLength: 80
+
+  # SOURCE: 04_workflow.yaml
+  workflow_config:
+    $ref: "#/$defs/WorkflowComponentConfig"
+    description: >
+      Required when type is WorkflowInbox or WorkflowDetail.
+      Declares which workflow, stage filters, and action buttons to expose.
+
+  # SOURCE: 04_workflow.yaml — workflow#Comment
+  comment_config:
+    $ref: "#/$defs/CommentThreadConfig"
+    description: >
+      Required when type is CommentThread.
+      Declares whether field-wise and overall comments are shown, and
+      attachment / picture policy.
+
+  # SOURCE: core#Audited + core#ChangeType
+  audit_config:
+    $ref: "#/$defs/AuditTrailConfig"
+    description: >
+      Required when type is AuditTrail.
+      Controls which change types and fields appear in the history log.
+
+  # SOURCE: utils#File + utils#Picture
+  file_config:
+    $ref: "#/$defs/FileComponentConfig"
+    description: >
+      Required when type is FileGallery.
+      Controls file type filters, thumbnail display, and upload policy.
+
+  # SOURCE: utils#OperatorType + utils#Formula
+  filter_config:
+    $ref: "#/$defs/FilterBuilderConfig"
+    description: >
+      Required when type is FilterBuilder.
+      Declares allowed operators and which schema fields can be filtered.
+
+  # SOURCE: 03_uam.yaml — uam#User.profiles
+  avatar_config:
+    $ref: "#/$defs/AvatarConfig"
+    description: >
+      Required when type is Avatar.
+      Controls which profile fields (nickName, photo) are displayed and
+      the fallback initials strategy.
+
+  # SOURCE: 02_schemata.yaml — Field.proField tag
+  show_pro_fields:
+    type: boolean
+    default: false
+    description: >
+      When true, fields tagged proField (schemata#Tag) are shown.
+      When false (default) they are hidden unless the user explicitly
+      expands a "More options" section.
+
+  # SOURCE: 02_schemata.yaml — Field.branching
+  enable_branching:
+    type: boolean
+    default: true
+    description: >
+      When true, the component respects field-level branching rules
+      (conditional field visibility driven by schemata#Field.branching).
+      Disable for admin/debug views that must show all fields.
+
+  # SOURCE: 02_schemata.yaml — schemata#Tag (sectioned)
+  sectioned:
+    type: boolean
+    default: false
+    description: >
+      When true and the bound schema is tagged 'sectioned', the component
+      groups its fields by schema-defined sections rather than rendering
+      them as a flat list. Uses schemata#Field.sectionType markers.
+
+  # SOURCE: 06_utils.yaml — utils#Pattern
+  field_validation_hints:
+    type: boolean
+    default: true
+    description: >
+      When true, input fields show pattern-hint icons / inline format
+      examples derived from their utils#Pattern (e.g. Phone, Email).
+
+  # SOURCE: 04_workflow.yaml — workflow#Schedule
+  schedule_indicator:
+    $ref: "#/$defs/ScheduleIndicator"
+    description: >
+      When set, the component renders a TAT / reminder countdown banner
+      for work items that have schedule entries.
+
+
+# ── 2d. DataBinding — add response_shape ─────────────────────────────────────
+# SOURCE: 06_utils.yaml — utils#DataAndErrorsResponse, utils#GetByIdResponse
+
+# ADD to $defs.DataBinding.properties:
+
+data_binding_property_additions:
+
+  response_shape:
+    type: string
+    enum: [DataAndErrorsResponse, GetByIdResponse, raw]
+    default: DataAndErrorsResponse
+    description: >
+      Declares which utils response envelope the data source returns.
+        DataAndErrorsResponse — { data, error } (write/put/post responses).
+        GetByIdResponse       — { base, versions } with version history.
+        raw                   — response is used as-is (list arrays, etc.).
+      The runtime uses this to extract the payload and surface errors.
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SECTION 3 — NEW $defs ADDITIONS
+# ══════════════════════════════════════════════════════════════════════════════
+
+$defs:
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  ENUMS FROM schemata (02_schemata.yaml)                                  ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+
+  UIPersistenceType:
+    # schemata#UIPersistence
+    type: string
+    description: >
+      Controls when and how a component's fetched data is cached.
+        LRU          — least-recently-used in-memory cache (default for Sets).
+        Session      — browser/app session scope; cleared on close.
+        Profile      — persisted to the user's profile store across sessions.
+        AppFirstLoad — loaded once at app initialisation; read-only thereafter.
+        InApp        — in-memory for the lifetime of the component mount only.
+    enum: [LRU, Session, Profile, AppFirstLoad, InApp]
+
+  ChoiceRenderType:
+    # schemata#ChoiceType
+    type: string
+    description: >
+      How a choice / enum field renders its options in a form or filter UI.
+        radio    — radio button group (mutually exclusive, visible options).
+        checkbox — checkbox group (multi-select).
+        dropDown — dropdown select.
+        autoFill — type-to-search autocomplete combobox.
+        pick     — modal / drawer picker (for large option sets).
+    enum: [radio, checkbox, dropDown, autoFill, pick]
+
+  SectionBreakType:
+    # schemata#SectionType
+    type: string
+    description: >
+      Marker type for schema-driven section boundaries within a component.
+        start    — opens a collapsible / titled section block.
+        end      — closes the current section block.
+        break    — visual divider line without a new section scope.
+        continue — resumes a previously interrupted section.
+    enum: [start, end, break, continue]
+
+  SchemaTagType:
+    # schemata#Tag — only tags with direct UI rendering impact
+    type: string
+    description: >
+      Tags from schemata#Tag that directly affect UI rendering behaviour.
+      The runtime reads these from schema field metadata.
+        uiOnly        — field rendered in UI but never sent to the server.
+        sectioned     — schema groups its fields into sections.
+        proField      — hidden until user expands "More options".
+        allowOthers   — free-text input allowed alongside enum options.
+        linkedField   — value copied from / synced to another field.
+        radio         — render this choice field as radio buttons.
+        checkbox      — render this choice field as checkboxes.
+        dropDown      — render this choice field as a dropdown.
+        autoFill      — render this choice field as an autocomplete.
+        pick          — render this choice field as a picker modal.
+        switch        — render this boolean field as a toggle switch.
+        csv           — multi-value field displayed as comma-separated chips.
+    enum:
+      [uiOnly, sectioned, proField, allowOthers, linkedField,
+       radio, checkbox, dropDown, autoFill, pick, switch, csv]
+
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  ENUMS FROM core (01_core.yaml)                                          ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+
+  DataState:
+    # core#DataState  (tags: readOnly — UI should never allow editing this)
+    type: string
+    description: >
+      [Mirror of core#DataState — authoritative in 01_core.yaml]
+      Lifecycle state of a data record. Rendered as a read-only badge.
+        stored     — persisted but not yet validated.
+        error      — validation or processing failed.
+        validated  — passed all validation rules.
+        inWorkflow — currently in an active workflow stage.
+        active     — live and usable.
+        inactive   — soft-deleted or deactivated.
+        rejected   — rejected by a workflow step.
+    enum: [stored, error, validated, inWorkflow, active, inactive, rejected]
+
+  ChangeType:
+    # core#ChangeType — drives the action column in AuditTrail
+    type: string
+    description: >
+      [Mirror of core#ChangeType — authoritative in 01_core.yaml]
+      Type of change recorded in an Audited entry. Used to label audit rows
+      and filter the AuditTrail component.
+    enum: [create, update, delete, reactivate, add, remove]
+
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  ENUMS FROM workflow (04_workflow.yaml)                                  ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+
+  WorkflowActionType:
+    # workflow#WorkflowActionType
+    type: string
+    description: >
+      [Mirror of workflow#WorkflowActionType — authoritative in 04_workflow.yaml]
+      The set of actions a user can perform on a WorkItem at a given stage.
+      Used to determine which buttons appear in WorkflowDetail components and
+      which ButtonActionType values map to workflow engine calls.
+        Approve / EditApprove — accept the work item (with optional edits).
+        Reject                — reject and optionally return to originator.
+        Forward               — delegate to another role / user.
+        Return                — send back to the previous stage.
+        Recall                — originator withdraws the submission.
+        Accept / Unaccept     — claim or release ownership of a task.
+        Assign / Unassign     — manager assigns/unassigns to a specific user.
+        NewTask               — spawn a parallel task from this item.
+        TaskCompleted         — mark a parallel task as done.
+        Escalation            — trigger an escalation path.
+        Split / Merge         — split into or merge from parallel work items.
+        Stop / Exit           — terminate the workflow.
+        Error                 — system-generated error state transition.
+    enum:
+      [Approve, EditApprove, Reject, Forward, Return, Recall,
+       Accept, Assign, Unassign, Unaccept, NewTask, TaskCompleted,
+       Escalation, Error, Split, Merge, Stop, Exit]
+
+  WorkItemState:
+    # workflow#WorkItemState (tags: readOnly)
+    type: string
+    description: >
+      [Mirror of workflow#WorkItemState — authoritative in 04_workflow.yaml]
+      Current state of a WorkItem. Rendered as a read-only badge by
+      WorkflowInbox / WorkflowDetail components and StateBadge.
+    enum: [Active, Edited, Approved, Rejected, Recalled, Returned,
+           Error, Split, Merge, Assigned]
+
+  WorkType:
+    # workflow#WorkType
+    type: string
+    description: >
+      [Mirror of workflow#WorkType — authoritative in 04_workflow.yaml]
+      The CRUD operation type a workflow is associated with. Used to
+      determine which uam#Auth permission flag must be true before the
+      workflow actions are exposed to the current user.
+        All — any operation type; broadest gate.
+    enum: [Read, Create, Update, Deactivate, Reactivate,
+           Upload, Download, Print, Share, All]
+
+  ScheduleType:
+    # workflow#ScheduleType
+    type: string
+    description: >
+      [Mirror of workflow#ScheduleType — authoritative in 04_workflow.yaml]
+      Category of a schedule entry on a workflow stage. Drives how the
+      ScheduleIndicator renders a countdown or alert banner.
+        Reminder  — soft deadline reminder to the assignee.
+        TAT       — hard turnaround-time deadline (shown as countdown timer).
+        Alert     — informational alert when threshold is crossed.
+        Escalation— triggers automatic escalation path when elapsed.
+        ActApprove— auto-approve after duration if no action taken.
+        ActReject — auto-reject after duration if no action taken.
+    enum: [Reminder, TAT, Alert, Escalation, ActApprove, ActReject]
+
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  ENUMS FROM utils (06_utils.yaml)                                        ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+
+  DurationType:
+    # utils#Duration — tagValues carry millisecond equivalents
+    type: string
+    description: >
+      [Mirror of utils#Duration — authoritative in 06_utils.yaml]
+      Named duration units used in ScheduleIndicator countdowns.
+      Each value has a canonical millisecond equivalent in the source:
+        Day   =  86 400 000 ms
+        Week  = 604 800 000 ms
+        Month = 2 592 000 000 ms
+        Year  = 31 536 000 000 ms
+    enum: [Day, Week, Month, Year, Decade]
+
+  OperatorType:
+    # utils#OperatorType — subset relevant to filter/condition UI
+    type: string
+    description: >
+      [Subset of utils#OperatorType relevant to FilterBuilder UI]
+      Logical and comparison operators the FilterBuilder component exposes
+      when constructing a utils#Formula condition.
+      The full set is in 06_utils.yaml; only comparison and logical operators
+      are UI-relevant. Arithmetic operators (squared, cubed, times, plus, etc.)
+      are formula-engine concerns, not filter-builder UI concerns.
+    enum:
+      [and, or, not,
+       equals, unequals, "is", "is not",
+       "greater than", "less than",
+       "greater than or equal to", "less than or equal to",
+       "in", "not in", exists, be]
+
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  STATE INDICATOR  (core#DataState + workflow#WorkItemState)              ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+
+  StateIndicator:
+    type: object
+    additionalProperties: false
+    required: [state_field, badges]
+    description: >
+      Drives a read-only state badge on a component. The runtime reads the
+      field named in state_field from the record and maps its value to a
+      badge definition. Typically keyed under "data.*" for core#DataState
+      and "workitem.*" for workflow#WorkItemState.
+    properties:
+      state_field:
+        type: string
+        description: >
+          The record field name whose value is matched against the badges map.
+          Typically "dataState" (core#DataState) or "state" (workflow#WorkItemState).
+        minLength: 1
+      badges:
+        type: object
+        description: >
+          Map of state value → badge presentation. Keys must be valid values
+          of the referenced DataState or WorkItemState enum.
+        additionalProperties:
+          type: object
+          additionalProperties: false
+          required: [label]
+          properties:
+            label:
+              type: string
+              maxLength: 40
+            color:
+              type: string
+              pattern: "^[A-Fa-f0-9]{6}$"
+              description: Badge background colour (hex, no leading #).
+            text_color:
+              type: string
+              pattern: "^[A-Fa-f0-9]{6}$"
+            icon_ref:
+              type: string
+              maxLength: 80
+            style:
+              type: string
+              enum: [filled, outlined, dot]
+              default: filled
+
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  WORKFLOW COMPONENT CONFIG  (04_workflow.yaml)                           ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+
+  WorkflowComponentConfig:
+    type: object
+    additionalProperties: false
+    description: >
+      Configuration for components of type WorkflowInbox or WorkflowDetail.
+      Binds the component to a specific workflow and controls which stage
+      actions are surfaced as buttons.
+    properties:
+      workflow_ref:
+        type: string
+        description: >
+          Name of the workflow#Workflow this component operates against.
+          Must match a workflow#Workflow.name value.
+        minLength: 1
+      work_types:
+        type: array
+        description: >
+          Filter the inbox/detail to only show work items of these WorkTypes.
+          An empty list means all work types are shown.
+        items:
+          $ref: "#/$defs/WorkType"
+        uniqueItems: true
+      visible_states:
+        type: array
+        description: >
+          Only show work items in these WorkItemStates.
+          Defaults to [Active, Assigned, Edited] for Inbox;
+          all states for Detail.
+        items:
+          $ref: "#/$defs/WorkItemState"
+        uniqueItems: true
+      available_actions:
+        type: array
+        description: >
+          Which WorkflowActionTypes are surfaced as action buttons.
+          The runtime intersects this list with the stage's allowed actions
+          and the current user's uam#Auth permissions before rendering.
+          An empty list means all permitted actions are shown.
+        items:
+          $ref: "#/$defs/WorkflowActionType"
+        uniqueItems: true
+      action_button_map:
+        type: object
+        description: >
+          Optional: map each WorkflowActionType to a named button from the
+          manifest "buttons" registry, overriding the auto-generated button.
+          Key = WorkflowActionType value; value = button key.
+        additionalProperties:
+          type: string
+      show_stage_history:
+        type: boolean
+        default: false
+        description: Display the sequence of stages the item has passed through.
+      show_schedule_banner:
+        type: boolean
+        default: true
+        description: >
+          When true and the current stage has Schedule entries, renders a
+          ScheduleIndicator banner above the work item content.
+      inline_comment_thread:
+        type: boolean
+        default: true
+        description: Embed the overall comment thread within the detail component.
+      inline_fieldwise_comments:
+        type: boolean
+        default: false
+        description: Show per-field comment indicators directly on form fields.
+
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  COMMENT THREAD CONFIG  (04_workflow.yaml — workflow#Comment)            ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+
+  CommentThreadConfig:
+    type: object
+    additionalProperties: false
+    description: >
+      Controls the CommentThread component that renders workflow#Comment records.
+      A comment contains multiLineText, an optional picture, and file attachments.
+    properties:
+      show_overall_comments:
+        type: boolean
+        default: true
+        description: Show comments on the work item as a whole.
+      show_fieldwise_comments:
+        type: boolean
+        default: false
+        description: Show the field-level comment panel (grouped by fieldName).
+      allow_attachments:
+        type: boolean
+        default: true
+        description: >
+          Allow users to attach utils#File records to a comment.
+          When false the attachment UI is hidden.
+      allow_pictures:
+        type: boolean
+        default: true
+        description: >
+          Allow users to attach a utils#Picture to a comment.
+          When false the picture icon is hidden.
+      max_attachment_size_mb:
+        type: number
+        minimum: 0
+        default: 10
+      filter_by_stage:
+        type: boolean
+        default: false
+        description: >
+          When true, only show comments from the current workflow stage.
+          When false, all stage comments are shown in chronological order.
+      editable:
+        type: boolean
+        default: false
+        description: Allow the comment author to edit their own comments.
+
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  AUDIT TRAIL CONFIG  (01_core.yaml — core#Audited + core#ChangeType)    ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+
+  AuditTrailConfig:
+    type: object
+    additionalProperties: false
+    description: >
+      Controls the AuditTrail component that renders core#Audited change records.
+      Each audit entry has: version, change (ChangeType), by (userId), on (date),
+      and optionally workitem (linked WorkItem ID).
+    properties:
+      visible_change_types:
+        type: array
+        description: >
+          Which ChangeType values to show. An empty list means show all.
+        items:
+          $ref: "#/$defs/ChangeType"
+        uniqueItems: true
+      visible_fields:
+        type: array
+        description: >
+          When set, the audit log only displays changes to these field names.
+          Useful to hide system-internal field changes from end users.
+        items:
+          type: string
+        uniqueItems: true
+      show_workitem_link:
+        type: boolean
+        default: true
+        description: >
+          When true and an audit entry has a workitem ID, render a navigation
+          link to the associated WorkflowDetail screen.
+      max_versions_shown:
+        type: [integer, "null"]
+        minimum: 1
+        default: 50
+        description: >
+          Maximum number of historical versions to load initially.
+          Null = load all. Pagination via DataBinding applies.
+      diff_view:
+        type: string
+        enum: [inline, side_by_side, none]
+        default: inline
+        description: >
+          How changed field values are presented per audit row.
+            inline      — old and new values shown in a single column.
+            side_by_side— two-column before/after layout.
+            none        — show only the change type and actor, no values.
+
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  FILE COMPONENT CONFIG  (06_utils.yaml — utils#File + utils#Picture)    ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+
+  FileComponentConfig:
+    type: object
+    additionalProperties: false
+    description: >
+      Controls the FileGallery component that lists utils#File and utils#Picture
+      records. A Picture inherits File and adds a thumbPath field.
+    properties:
+      allow_pictures:
+        type: boolean
+        default: true
+        description: Show utils#Picture records with thumbnails.
+      allow_files:
+        type: boolean
+        default: true
+        description: Show generic utils#File records.
+      allowed_file_types:
+        type: array
+        description: >
+          MIME type or extension allow-list. Empty = all types permitted.
+          Example: [image/jpeg, image/png, application/pdf]
+        items:
+          type: string
+      max_file_size_mb:
+        type: number
+        minimum: 0
+        default: 20
+      upload_enabled:
+        type: boolean
+        default: false
+        description: Show an upload button. Requires uam#Auth.upload = true.
+      delete_enabled:
+        type: boolean
+        default: false
+        description: Show delete controls. Requires uam#Auth.deactivate = true.
+      download_enabled:
+        type: boolean
+        default: true
+        description: Show download links. Requires uam#Auth.download = true.
+      thumbnail_size:
+        type: string
+        enum: [small, medium, large]
+        default: medium
+        description: >
+          Size of picture thumbnails in gallery view.
+          Uses utils#Picture.thumbPath when available.
+      layout:
+        type: string
+        enum: [grid, list]
+        default: grid
+        description: >
+          grid — picture-first gallery view.
+          list — file-name / metadata row view (better for non-image files).
+      category_filter:
+        type: boolean
+        default: false
+        description: >
+          Show a filter control for utils#File.category when true.
+      tag_filter:
+        type: boolean
+        default: false
+        description: Show a filter control for utils#File.tags.
+
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  FILTER BUILDER CONFIG  (06_utils.yaml — utils#OperatorType + Formula)  ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+
+  FilterBuilderConfig:
+    type: object
+    additionalProperties: false
+    description: >
+      Controls the FilterBuilder component. Lets users build structured
+      utils#Formula conditions using a visual UI backed by utils#OperatorType.
+      The built formula is forwarded to DataBinding.query_params or a custom
+      action handler.
+    properties:
+      filterable_fields:
+        type: array
+        description: >
+          Names of schema fields that can be used as filter operands.
+          An empty list means all non-secret, non-proField fields are available.
+        items:
+          type: string
+        uniqueItems: true
+      allowed_operators:
+        type: array
+        description: >
+          Which OperatorType values are shown in the operator dropdown.
+          Defaults to the comparison + logical subset (see OperatorType def).
+        items:
+          $ref: "#/$defs/OperatorType"
+        uniqueItems: true
+      max_conditions:
+        type: integer
+        minimum: 1
+        default: 10
+        description: Maximum number of condition rows the user may add.
+      allow_nesting:
+        type: boolean
+        default: false
+        description: >
+          When true, allows grouped sub-conditions (AND / OR nesting).
+          Results in nested utils#Formula.values lists.
+      output_action_ref:
+        type: string
+        description: >
+          Key of a manifest action (form#ActionDef) triggered with the
+          built formula when the user applies the filter.
+        maxLength: 80
+      preset_filters:
+        type: array
+        description: Named formula presets the user can select as a starting point.
+        items:
+          type: object
+          required: [label, expression]
+          additionalProperties: false
+          properties:
+            label:
+              type: string
+              maxLength: 60
+            expression:
+              type: string
+              description: utils#Formula expression string.
+              maxLength: 500
+
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  SCHEDULE INDICATOR  (04_workflow.yaml — ScheduleType + utils#Duration) ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+
+  ScheduleIndicator:
+    type: object
+    additionalProperties: false
+    description: >
+      Renders a TAT countdown or alert banner on a WorkItem component.
+      Driven by workflow#Stage.schedule entries and utils#Duration values.
+    properties:
+      show_types:
+        type: array
+        description: Which ScheduleType entries to surface in the UI banner.
+        items:
+          $ref: "#/$defs/ScheduleType"
+        uniqueItems: true
+        default: [TAT, Escalation, Reminder]
+      countdown_format:
+        type: string
+        enum: [relative, absolute, both]
+        default: relative
+        description: >
+          relative — "2 days remaining" (uses utils#Duration scale).
+          absolute — exact due date-time.
+          both     — relative label with tooltip showing absolute.
+      warning_threshold_pct:
+        type: integer
+        minimum: 0
+        maximum: 100
+        default: 75
+        description: >
+          Percentage of the schedule duration elapsed at which the indicator
+          switches from info to warning colour.
+      critical_threshold_pct:
+        type: integer
+        minimum: 0
+        maximum: 100
+        default: 90
+        description: >
+          Percentage elapsed at which the indicator switches to error colour
+          and triggers an Escalation notification if configured.
+      overdue_label:
+        type: string
+        default: "Overdue"
+        maxLength: 40
+      banner_position:
+        $ref: "#/$defs/LayoutDirection"
+        description: >
+          Where to render the banner relative to the parent component.
+          Typically Top.
+
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  AVATAR CONFIG  (03_uam.yaml — uam#User.profiles)                       ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+
+  AvatarConfig:
+    type: object
+    additionalProperties: false
+    description: >
+      Controls the Avatar component that renders uam#User.profiles data
+      (nickName and photo). Used in comment threads, audit trail rows,
+      and user-picker components.
+    properties:
+      show_photo:
+        type: boolean
+        default: true
+        description: >
+          Render uam#Profiles.photo as the avatar image.
+          Falls back to initials when photo is absent or when false.
+      show_nick_name:
+        type: boolean
+        default: true
+        description: Show uam#Profiles.nickName alongside or below the avatar.
+      fallback_style:
+        type: string
+        enum: [initials, icon, placeholder]
+        default: initials
+        description: >
+          What to show when no photo is available.
+            initials    — first letters of uam#User.name.
+            icon        — a generic person icon (icon_ref below).
+            placeholder — a neutral grey circle.
+      fallback_icon_ref:
+        type: string
+        description: Key from manifest "icons". Used when fallback_style=icon.
+        maxLength: 80
+      size:
+        type: string
+        enum: [xs, sm, md, lg, xl]
+        default: md
+        description: Preset avatar diameter.
+      shape:
+        type: string
+        enum: [circle, rounded, square]
+        default: circle
+      show_online_indicator:
+        type: boolean
+        default: false
+        description: >
+          Show a presence dot (online/offline) if the runtime provides
+          presence data via context.
+
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  ROLE PREFERENCE OVERRIDE  (03_uam.yaml — uam#Role.preferences)        ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+
+  RolePreferenceOverride:
+    type: object
+    additionalProperties: false
+    description: >
+      UI preference overrides applied to all users whose active uam#Role
+      matches the key in the manifest "role_preferences" map.
+      uam#Role.preferences is a Map<string> — this type formalises the
+      well-known keys that the UI runtime understands.
+      Unknown keys are forwarded to the custom preferences handler.
+    properties:
+      theme_extends:
+        type: string
+        description: >
+          Name of a theme variant to layer on top of the manifest theme.
+          Use to give, e.g., a Customer role a lighter palette.
+        maxLength: 60
+      default_locale:
+        type: string
+        description: BCP-47 locale code (e.g. "en-US", "ar-AE").
+        maxLength: 20
+      default_currency:
+        type: string
+        description: ISO 4217 currency code (e.g. "USD", "AED").
+        maxLength: 3
+      hidden_screens:
+        type: array
+        description: Screen keys hidden from this role's navigation.
+        items:
+          type: string
+        uniqueItems: true
+      hidden_components:
+        type: array
+        description: Component keys always hidden for this role.
+        items:
+          type: string
+        uniqueItems: true
+      column_visibility:
+        type: object
+        description: >
+          Per-component default column visibility. Key = component key;
+          value = list of field names to show. Remaining fields are hidden.
+        additionalProperties:
+          type: array
+          items:
+            type: string
+      show_pro_fields:
+        type: boolean
+        description: >
+          Override for the component-level show_pro_fields setting for this
+          role. True = all proFields visible by default.
+      items_per_page:
+        type: integer
+        minimum: 1
+        description: Default pagination page size for list/table components.
+      date_format:
+        type: string
+        description: >
+          Preferred date display format (e.g. "DD/MM/YYYY", "MM-DD-YYYY").
+        maxLength: 20
