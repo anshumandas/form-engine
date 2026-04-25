@@ -30,7 +30,11 @@ export function FormEngine({
 
   useEffect(() => {
     init(manifest, formId, initialAnswers, context);
-  }, [manifest, formId]);
+  // initialAnswers is intentionally excluded from the dep array:
+  // re-initialising on every parent render would reset in-progress answers.
+  // If callers need to change initialAnswers, they should also change formId.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manifest.manifest_id, formId]);
 
   if (!form) return (
     <div className="flex items-center justify-center p-12 text-gray-400">

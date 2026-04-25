@@ -2,10 +2,12 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { api } from "@form-engine/libs/api";
-import { categoryApi, type CategorySummary } from "@form-engine/libs/api";
+import { useRouter } from "next/navigation";
+import { api } from "@/libs/api";
+import { categoryApi, type CategorySummary } from "@/libs/api";
 import type { ManifestSummary } from "@form-engine/libs/types";
 import { formatDate, cn } from "@form-engine/libs/utils";
+import { useAuth } from "@/providers/auth-context";
 import { toast } from "sonner";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -272,6 +274,14 @@ function RenameCategoryModal({ manifest, onClose, onRename }: {
 
 // ─── Home Page ────────────────────────────────────────────────────────────────
 export default function HomePage() {
+  const router = useRouter();
+  const { user, signout } = useAuth();
+
+  const handleSignout = () => {
+    signout();
+    router.push("/auth");
+  };
+
   const [manifests, setManifests] = useState<ManifestSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -375,6 +385,9 @@ export default function HomePage() {
               <input type="file" accept=".yaml,.yml,.json" className="sr-only"
                 onChange={handleUpload} disabled={uploading} />
             </label>
+
+            {/* User badge + signout */}
+            {user && <UserBadge user={user} onSignout={handleSignout} />}
           </div>
         </div>
       </header>
@@ -450,6 +463,58 @@ export default function HomePage() {
             ));
           }}
         />
+      )}
+    </div>
+  );
+}
+
+// ─── User Badge ───────────────────────────────────────────────────────────────
+function UserBadge({ user, onSignout }: {
+  user: { email: string; name?: string };
+  onSignout: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const initials = (user.name ?? user.email)
+    .split(/[\s@]/).filter(Boolean).slice(0, 2)
+    .map(s => s[0].toUpperCase()).join("");
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-2 rounded-xl px-2.5 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+        aria-label="Account menu"
+      >
+        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+          {initials || "?"}
+        </div>
+        <span className="hidden sm:block text-sm font-medium text-gray-700 dark:text-gray-200 max-w-[120px] truncate">
+          {user.name ?? user.email}
+        </span>
+        <svg className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 12 12" fill="currentColor">
+          <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+        </svg>
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-10 z-20 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1 w-52">
+            {/* User info */}
+            <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-800">
+              <p className="text-xs font-semibold text-gray-800 dark:text-white truncate">
+                {user.name ?? "—"}
+              </p>
+              <p className="text-xs text-gray-400 truncate">{user.email}</p>
+            </div>
+            <button
+              onClick={() => { setOpen(false); onSignout(); }}
+              className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center gap-2"
+            >
+              <span>↩</span> Sign out
+            </button>
+          </div>
+        </>
       )}
     </div>
   );

@@ -7,6 +7,7 @@ import type {
   StaticChoice,
 } from "../../../libs/types";
 import { cn } from "../../../libs/utils";
+import { resolveApiUrl } from "../../../libs/config";
 
 // ─── Dynamic choices config (mirrors DynamicChoicesConfig in schema) ──────────
 interface DynamicChoicesConfig {
@@ -54,10 +55,12 @@ function useDynamicChoices(config: DynamicChoicesConfig | null): {
 
     const apiBase =
       typeof process !== "undefined"
-        ? (process.env?.NEXT_PUBLIC_API_URL ?? "http://localhost:8000")
-        : "http://localhost:8000";
+        ? (process.env?.NEXT_PUBLIC_API_URL ?? "")
+        : "";
 
-    const url = config.url.startsWith("http") ? config.url : `${apiBase}${config.url}`;
+    const url = config.url.startsWith("http")
+      ? config.url
+      : resolveApiUrl(config.url);
 
     fetch(url, {
       method: config.method ?? "GET",
@@ -168,11 +171,12 @@ interface FieldProps<T extends FormField> {
 
 export function TextFieldRenderer({ field, value, onChange, onBlur, errors, disabled }: FieldProps<TextField>) {
   const f = field as TextField;
+  const inputType = f.display_as && f.display_as !== "input" ? f.display_as : "text";
   return (
     <FieldWrapper label={f.label} required={f.required} hint={f.hint}
       description={f.description} errors={errors} width={f.width}>
       <input
-        type="text"
+        type={inputType}
         value={String(value ?? "")}
         onChange={e => onChange(e.target.value)}
         onBlur={onBlur}

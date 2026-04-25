@@ -1,12 +1,98 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import type { FormManifest, FormDef, FieldAnswers, FormSubmissionResponse, Section } from "../../../libs/types";
 import { useFormEngineStore } from "../../../store/form-engine-store";
 import { FieldRouter } from "../index";
 import { CollectionRenderer, ProFieldsSection } from "../CollectionRenderer";
-import { api } from "../../../libs/api";
+import { api } from "../../../../../frontend/src/libs/api";
 import { cn } from "../../../libs/utils";
+
+/**
+ * Validates that all sections have unique, non-null identifiers for React keys
+ * @throws Error with helpful YAML fix suggestions if validation fails
+ */
+function validateSectionKeys(sections: Section[]): void {
+  const usedKeys = new Set<string>();
+  const errors: string[] = [];
+
+  sections.forEach((section, index) => {
+    const sectionKey = section.id ?? section.title;
+
+    // Check if key is missing
+    if (!sectionKey) {
+      errors.push(
+        `Section at index ${index} is missing both 'id' and 'title'. ` +
+        `Add one of these to your YAML:\n` +
+        `  - id: "unique-section-id"  # or\n` +
+        `  - title: "Section Title"`
+      );
+      return;
+    }
+
+    // Check for duplicates
+    if (usedKeys.has(sectionKey)) {
+      errors.push(
+        `Duplicate section identifier "${sectionKey}" at index ${index}. ` +
+        `Each section must have a unique 'id' or 'title'. ` +
+        `Add a unique 'id' field or change the 'title' in your YAML.`
+      );
+    }
+    usedKeys.add(sectionKey);
+  });
+
+  if (errors.length > 0) {
+    throw new Error(
+      "Invalid section configuration in form YAML:\n\n" +
+      errors.join("\n\n") +
+      "\n\n" +
+      "Fix your form's sections configuration and reload."
+    );
+  }
+}
+
+/**
+ * Validates that all fields have unique, non-null identifiers for React keys
+ * @throws Error with helpful YAML fix suggestions if validation fails
+ */
+function validateFieldKeys(fields: any[], sectionId?: string): void {
+  const usedKeys = new Set<string>();
+  const errors: string[] = [];
+  const sectionRef = sectionId ? ` in section "${sectionId}"` : "";
+
+  fields.forEach((field, index) => {
+    const fieldKey = field.id;
+
+    // Check if key is missing
+    if (!fieldKey) {
+      errors.push(
+        `Field at index ${index}${sectionRef} is missing 'id'. ` +
+        `Add to your YAML:\n` +
+        `  - id: "field-unique-id"  # Required for all fields`
+      );
+      return;
+    }
+
+    // Check for duplicates
+    if (usedKeys.has(fieldKey)) {
+      errors.push(
+        `Duplicate field identifier "${fieldKey}" at index ${index}${sectionRef}. ` +
+        `Each field must have a unique 'id'. ` +
+        `Update the 'id' in your YAML.`
+      );
+    }
+    usedKeys.add(fieldKey);
+  });
+
+  if (errors.length > 0) {
+    throw new Error(
+      `Invalid field configuration${sectionRef} in form YAML:\n\n` +
+      errors.join("\n\n") +
+      "\n\n" +
+      "Fix your form's fields configuration and reload."
+    );
+  }
+}
 
 interface LayoutProps {
   manifest: FormManifest;
@@ -22,39 +108,121 @@ export function SinglePageLayout({ manifest, form, formId, onSubmit, onDraftSave
     getVisibleSections, setSubmitting, setSubmitted, submitting, validateAllFields, errors
   } = useFormEngineStore();
 
-  const sections = getVisibleSections(form.sections ?? []);
+  // Surface errors thrown by onSubmit (e.g. "Wrong password") inline
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Single-page forms may store their fields either at form.sections (flat)
+  // or nested inside form.pages[].sections (YAML-canonical structure).
+  // Flatten both so the layout works regardless of which shape the manifest uses.
+  const rawSections =
+    (form.sections?.length ?? 0) > 0
+      ? (form.sections ?? [])
+      : (form.pages?.flatMap(p => p.sections ?? []) ?? []);
+
+  const sections = getVisibleSections(rawSections);
+
+  // Validate section keys AFTER filtering to ensure rendered sections have unique keys
+  React.useEffect(() => {
+    try {
+      validateSectionKeys(sections);
+      setValidationError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Invalid section configuration";
+      setValidationError(message);
+    }
+  }, [sections]);
+
   const totalErrors = Object.values(errors).flat().length;
+
+  // Resolve the submit button label from submit_button.label → submit_label → default
+  const submitLabel = form.submit_button?.label ?? form.submit_label ?? "Submit";
+  const loadingLabel = form.submit_button?.loading_label ?? "Submitting…";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (validationError) {
+      setSubmitError("Cannot submit: Fix the form configuration errors above");
+      return;
+    }
+    setSubmitError(null);
     if (!validateAllFields()) return;
     setSubmitting(true);
     try {
       const payload = useFormEngineStore.getState().getSubmitPayload();
       const submitAction = form.on_submit;
+
       if (submitAction?.type === "rest" && submitAction.url) {
+        // Backend REST submission through api.submit()
         const response = await api.submit({
-          form_id: formId, manifest_id: manifest.manifest_id,
-          answers: payload, context: useFormEngineStore.getState().context,
+          form_id: formId,
+          manifest_id: manifest.manifest_id,
+          answers: payload,
+          context: useFormEngineStore.getState().context,
         });
-        if (response.status === "accepted") { setSubmitted(true); await onSubmit?.(payload, response); }
-      } else { setSubmitted(true); await onSubmit?.(payload); }
-    } catch (err) { console.error("Submission error:", err); }
-    finally { setSubmitting(false); }
+        if (response.status === "accepted") {
+          await onSubmit?.(payload, response);
+          // Only mark submitted if onSubmit didn't navigate away
+          setSubmitted(true);
+        }
+      } else {
+        // Local / none / custom: delegate entirely to onSubmit prop.
+        // Do NOT call setSubmitted here — let the caller decide (e.g. redirect).
+        if (onSubmit) {
+          await onSubmit(payload);
+        } else {
+          setSubmitted(true);
+        }
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Submission failed. Please try again.";
+      setSubmitError(message);
+      console.error("Submission error:", err);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleDraftSave = async () => {
     const answers = useFormEngineStore.getState().answers;
     await onDraftSave?.(answers);
-    try { await api.submit({ form_id: formId, manifest_id: manifest.manifest_id, answers, draft: true }); }
-    catch { /* silent */ }
+    try {
+      await api.submit({
+        form_id: formId,
+        manifest_id: manifest.manifest_id,
+        answers,
+        draft: true,
+      });
+    } catch { /* silent */ }
   };
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-6">
-      {sections.map(section => (
-        <SectionCard key={section.id ?? section.title} section={section} />
+      {/* Validation error — shown for malformed YAML configurations */}
+      {validationError && (
+        <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          <span className="mt-0.5 flex-shrink-0 text-lg">⚠️</span>
+          <div className="flex-1">
+            <p className="font-semibold mb-1">Form Configuration Error</p>
+            <pre className="text-xs bg-white dark:bg-gray-900 rounded px-2 py-1 overflow-auto whitespace-pre-wrap font-mono border border-amber-100 dark:border-amber-900/50">
+              {validationError}
+            </pre>
+          </div>
+        </div>
+      )}
+
+      {!validationError && sections.map((section, index) => (
+        <SectionCard key={section.id ?? section.title ?? `section-${index}`} section={section} />
       ))}
+
+      {/* Inline submit error — shown for auth failures, network errors, etc. */}
+      {submitError && (
+        <div className="flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-400">
+          <span className="mt-0.5 flex-shrink-0 text-red-500">⚠</span>
+          <span>{submitError}</span>
+        </div>
+      )}
+
       <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
         {totalErrors > 0 && (
           <p className="text-sm text-red-500 font-medium">
@@ -62,18 +230,28 @@ export function SinglePageLayout({ manifest, form, formId, onSubmit, onDraftSave
           </p>
         )}
         <div className="flex gap-3 ml-auto">
-          <button type="button" onClick={handleDraftSave}
-            className="px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-600 hover:bg-gray-50 transition-colors">
-            {form.draft_label ?? "Save Draft"}
-          </button>
-          <button type="submit" disabled={submitting || readOnly}
-            className="px-6 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 shadow-sm transition-all">
+          {/* Only show draft button when a handler is wired up */}
+          {onDraftSave && (
+            <button
+              type="button"
+              onClick={handleDraftSave}
+              className="px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              {form.draft_label ?? "Save Draft"}
+            </button>
+          )}
+          <button
+            type="submit"
+            disabled={submitting || readOnly || !!validationError}
+            data-submit-btn
+            className="px-6 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 shadow-sm transition-all"
+          >
             {submitting ? (
               <span className="flex items-center gap-2">
                 <span className="inline-block h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                Submitting…
+                {loadingLabel}
               </span>
-            ) : (form.submit_label ?? "Submit")}
+            ) : submitLabel}
           </button>
         </div>
       </div>
@@ -83,6 +261,21 @@ export function SinglePageLayout({ manifest, form, formId, onSubmit, onDraftSave
 
 function SectionCard({ section }: { section: Section }) {
   const { getVisibleFields } = useFormEngineStore();
+  const [fieldValidationError, setFieldValidationError] = React.useState<string | null>(null);
+
+  // Validate field keys when section fields change
+  React.useEffect(() => {
+    try {
+      const fieldsToValidate = section.fields ?? [];
+      if (fieldsToValidate.length > 0) {
+        validateFieldKeys(fieldsToValidate, section.id ?? section.title);
+      }
+      setFieldValidationError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Invalid field configuration";
+      setFieldValidationError(message);
+    }
+  }, [section.fields, section.id, section.title]);
 
   if (section.collection) {
     return (
@@ -114,18 +307,35 @@ function SectionCard({ section }: { section: Section }) {
         </div>
       )}
       <div className="p-6 space-y-4">
-        <div className="grid grid-cols-2 gap-x-5 gap-y-6">
-          {basicFields.map(field => (
-            <div key={field.id} className={cn(
-              field.width === "half" ? "col-span-1" :
-              field.width === "third" ? "col-span-1" : "col-span-2"
-            )}>
-              <FieldRouter field={field} />
+        {/* Field validation error — shown for malformed field configurations */}
+        {fieldValidationError && (
+          <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200 mb-4">
+            <span className="mt-0.5 flex-shrink-0 text-lg">⚠️</span>
+            <div className="flex-1">
+              <p className="font-semibold mb-1">Field Configuration Error</p>
+              <pre className="text-xs bg-white dark:bg-gray-900 rounded px-2 py-1 overflow-auto whitespace-pre-wrap font-mono border border-amber-100 dark:border-amber-900/50">
+                {fieldValidationError}
+              </pre>
             </div>
-          ))}
-        </div>
-        {proFields.length > 0 && (
-          <ProFieldsSection fields={proFields} />
+          </div>
+        )}
+
+        {!fieldValidationError && (
+          <>
+            <div className="grid grid-cols-2 gap-x-5 gap-y-6">
+              {basicFields.map((field, index) => (
+                <div key={field.id ?? `field-${index}`} className={cn(
+                  field.width === "half" ? "col-span-1" :
+                  field.width === "third" ? "col-span-1" : "col-span-2"
+                )}>
+                  <FieldRouter field={field} />
+                </div>
+              ))}
+            </div>
+            {proFields.length > 0 && (
+              <ProFieldsSection fields={proFields} />
+            )}
+          </>
         )}
       </div>
     </div>

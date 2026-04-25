@@ -37,7 +37,7 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    "../lib/src/libs/api.ts",
+    "src/libs/api.ts",
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [

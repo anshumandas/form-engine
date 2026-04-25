@@ -1,0 +1,97 @@
+manifest_version: "4.0.0"
+manifest_id: auth
+
+# Auth forms are shipped as local manifests (bundled with the frontend) so
+# they render without any network request. This YAML is the backend reference.
+
+forms:
+
+  # ─── Sign In ───────────────────────────────────────────────────────────────
+  signin:
+    version: "1.0.0"
+    form_id: signin
+    title: "Sign in"
+    form_state: active
+    layout:
+      type: single-page
+    submit_button:
+      label: "Sign in"
+      loading_label: "Signing in…"
+      position: bottom
+    on_submit:
+      type: local
+      success_message: "Signed in successfully."
+    pages:
+      - id: main
+        title: "Credentials"
+        sections:
+          - id: credentials
+            fields:
+              - id: email
+                type: text
+                display_as: email
+                label: "Email address"
+                required: true
+                placeholder: "you@company.com"
+                autocomplete: "email"
+              - id: password
+                type: text
+                display_as: password
+                label: "Password"
+                required: true
+                placeholder: "••••••••"
+                min_length: 6
+                autocomplete: "current-password"
+
+  # ─── Sign Up ───────────────────────────────────────────────────────────────
+  signup:
+    version: "1.0.0"
+    form_id: signup
+    title: "Create account"
+    form_state: active
+    layout:
+      type: single-page
+    submit_button:
+      label: "Create account"
+      loading_label: "Creating account…"
+      position: bottom
+    on_submit:
+      type: local
+      success_message: "Account created. Welcome aboard!"
+    pages:
+      - id: main
+        title: "Your details"
+        sections:
+          - id: identity
+            fields:
+              - id: full_name
+                type: text
+                label: "Full name"
+                required: true
+                placeholder: "Jane Smith"
+                width: full
+                autocomplete: "name"
+              - id: email
+                type: text
+                display_as: email
+                label: "Email address"
+                required: true
+                placeholder: "you@company.com"
+                width: full
+                autocomplete: "email"
+              - id: password
+                type: text
+                display_as: password
+                label: "Password"
+                required: true
+                placeholder: "••••••••"
+                min_length: 8
+                hint: "At least 8 characters"
+                autocomplete: "new-password"
+              - id: confirm_password
+                type: text
+                display_as: password
+                label: "Confirm password"
+                required: true
+                placeholder: "••••••••"
+                autocomplete: "new-password"

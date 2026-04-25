@@ -7,7 +7,7 @@
  */
 import { useCallback } from "react";
 import { useFormEngineStore } from "../store/form-engine-store";
-import { api } from "/libs/api";
+import { api } from "../../../frontend/src/libs/api";
 import type { FieldAnswers, FormContext, FormManifest, FormSubmissionResponse } from "../libs/types";
 
 export interface UseFormEngineReturn {

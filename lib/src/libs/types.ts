@@ -192,6 +192,7 @@ export interface FieldBase {
 // ─── Field Types ──────────────────────────────────────────────────────────────
 export interface TextField extends FieldBase {
   type: "text";
+  display_as?: "input" | "password" | "email" | "url" | "tel" | "search";
   min_length?: number;
   max_length?: number;
   pattern?: string;
@@ -439,6 +440,13 @@ export interface DraftConfig {
   draft_key?: string;
 }
 
+export interface SubmitButtonConfig {
+  label?: string;
+  position?: "bottom" | "top" | "both";
+  loading_label?: string;
+  icon?: string;
+}
+
 export interface FormDef {
   title: string;
   description?: string;
@@ -453,6 +461,7 @@ export interface FormDef {
   layout: FormLayout;
   submit_label?: string;
   draft_label?: string;
+  submit_button?: SubmitButtonConfig;
   pages?: Page[];
   sections?: Section[];
   on_submit?: SubmitAction;

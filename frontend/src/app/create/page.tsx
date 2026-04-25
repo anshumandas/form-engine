@@ -3,7 +3,7 @@
 import React, { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { api } from "@form-engine/libs/api";
+import { api } from "@/libs/api";
 import { FormEngine } from "@form-engine/components/FormEngine";
 import { FormErrorBoundary } from "@form-engine/components/FormEngine/FormErrorBoundary";
 import type { FormManifest, FieldAnswers } from "@form-engine/libs/types";

@@ -3,7 +3,7 @@
 import React, { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { api } from "@form-engine/libs/api";
+import { api } from "@/libs/api";
 import { formatDate } from "@form-engine/libs/utils";
 import { toast } from "sonner";
 

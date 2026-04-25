@@ -3,17 +3,26 @@ import type {
   ManifestSummary,
   FormSubmissionPayload,
   FormSubmissionResponse,
-} from "./types";
+} from "form-engine/src/libs/types";
+import { getConfig, resolveApiUrl } from "form-engine/src/libs/config";
 
-// Use relative paths so all requests go through the Next.js rewrite proxy
-// (/api/* → NEXT_PUBLIC_API_URL/api/*). Works in dev and Docker.
+// ─── Core fetcher ─────────────────────────────────────────────────────────────
+// Uses relative paths by default (Next.js /api proxy), or an absolute base URL
+// when configured via FormEngineProvider / configureFormEngine().
+
 async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
+  const cfg = getConfig();
+  const url = resolveApiUrl(path);
   try {
-    const res = await fetch(path, {
-      headers: { "Content-Type": "application/json", ...options.headers },
+    const res = await fetch(url, {
+      headers: {
+        "Content-Type": "application/json",
+        ...cfg.headers,
+        ...options.headers,
+      },
       ...options,
     });
 
@@ -23,9 +32,7 @@ async function request<T>(
         const err = await res.json();
         errMsg = err.detail || err.message || errMsg;
       } catch {
-        try {
-          errMsg = await res.text();
-        } catch {}
+        try { errMsg = await res.text(); } catch {}
       }
       throw new Error(errMsg);
     }
@@ -34,11 +41,10 @@ async function request<T>(
     return res.json() as Promise<T>;
   } catch (err: unknown) {
     if (err instanceof TypeError) {
-      // Network error or CORS issue
-      const msg = err.message.includes('fetch') 
-        ? 'Network error. Is the backend running?'
+      const msg = err.message.includes("fetch")
+        ? "Network error. Is the backend running?"
         : err.message;
-      console.error('[API Request Error]', path, err);
+      console.error("[API Request Error]", url, err);
       throw new Error(msg);
     }
     throw err;
@@ -71,9 +77,12 @@ export const api = {
   listManifests: (): Promise<ManifestSummary[]> =>
     request("/api/forms/"),
 
-  // Get full manifest
-  getManifest: (manifestId: string): Promise<FormManifest> =>
-    request(`/api/forms/${manifestId}`),
+  // Get full manifest — checks localManifests first (zero-network for bundled forms)
+  getManifest: (manifestId: string): Promise<FormManifest> => {
+    const local = getConfig().localManifests?.[manifestId];
+    if (local) return Promise.resolve(local);
+    return request(`/api/forms/${manifestId}`);
+  },
 
   // Get single form with context
   getForm: (manifestId: string, formId: string): Promise<{
@@ -81,7 +90,19 @@ export const api = {
     form_id: string;
     manifest: FormManifest;
     form: unknown;
-  }> => request(`/api/forms/${manifestId}/forms/${formId}`),
+  }> => {
+    // If the manifest is local, we can resolve without a network call
+    const local = getConfig().localManifests?.[manifestId];
+    if (local) {
+      return Promise.resolve({
+        manifest_id: manifestId,
+        form_id: formId,
+        manifest: local,
+        form: (local.forms as Record<string, unknown>)[formId] ?? null,
+      });
+    }
+    return request(`/api/forms/${manifestId}/forms/${formId}`);
+  },
 
   // Create/update manifest
   upsertManifest: (manifest: Record<string, unknown>): Promise<{ manifest_id: string; status: string }> =>
@@ -97,10 +118,13 @@ export const api = {
 
   // Upload YAML/JSON file
   uploadManifest: async (file: File): Promise<{ manifest_id: string; forms: string[] }> => {
+    const cfg = getConfig();
+    const url = resolveApiUrl("/api/forms/upload");
     const formData = new FormData();
     formData.append("file", file);
-    const res = await fetch("/api/forms/upload", {
+    const res = await fetch(url, {
       method: "POST",
+      headers: cfg.headers,
       body: formData,
     });
     if (!res.ok) {
@@ -119,8 +143,14 @@ export const api = {
   }> => request("/api/forms/validate", { method: "POST", body: JSON.stringify(manifest) }),
 
   // ─── Submissions ─────────────────────────────────────────────────────────────
-  submit: (payload: FormSubmissionPayload): Promise<FormSubmissionResponse> =>
-    request("/api/submissions/", { method: "POST", body: JSON.stringify(payload) }),
+  submit: (payload: FormSubmissionPayload): Promise<FormSubmissionResponse> => {
+    // Allow a global onSubmit override from config (e.g. for auth token injection)
+    const override = getConfig().onSubmit;
+    if (override) {
+      return override(payload.manifest_id||"", payload.form_id, payload.answers) as Promise<FormSubmissionResponse>;
+    }
+    return request("/api/submissions/", { method: "POST", body: JSON.stringify(payload) });
+  },
 
   listSubmissions: (params?: { form_id?: string; manifest_id?: string }): Promise<unknown[]> => {
     const qs = new URLSearchParams();

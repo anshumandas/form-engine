@@ -547,6 +547,12 @@ class FormLayout(BaseModel):
     type: Literal["single-page", "wizard", "grid"]
     columns: int = Field(default=12, ge=1, le=12)
 
+class SubmitButtonConfig(BaseModel):
+    label: Optional[str] = None
+    position: Literal["bottom", "top", "both"] = "bottom"
+    loading_label: Optional[str] = None
+    icon: Optional[str] = None
+
 class FormDef(BaseModel):
     title: str
     description: Optional[str] = None
@@ -561,6 +567,7 @@ class FormDef(BaseModel):
     layout: FormLayout
     submit_label: str = "Submit"
     draft_label: str = "Save Draft"
+    submit_button: Optional[SubmitButtonConfig] = None
     pages: Optional[List[Page]] = None
     sections: Optional[List[Section]] = None
     on_submit: Optional[SubmitAction] = None
