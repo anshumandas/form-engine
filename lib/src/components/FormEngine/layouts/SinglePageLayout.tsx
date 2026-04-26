@@ -287,7 +287,7 @@ function SectionCard({ section }: { section: Section }) {
 
   const allVisible = getVisibleFields(section.fields ?? []);
   const basicFields = allVisible.filter(f => !f.advanced);
-  const proFields   = allVisible.filter(f => !!f.advanced);
+  const proFields   = allVisible.filter(f => f.advanced);
   if (allVisible.length === 0) return null;
 
   return (
@@ -313,7 +313,9 @@ function SectionCard({ section }: { section: Section }) {
 
         {!fieldValidationError && (
           <>
-            <div className="grid grid-cols-2 gap-x-5 gap-y-6">
+            <div className="grid grid-cols-1 gap-x-5 gap-y-6"> {
+            //grid-cols-2 is not working for width full
+              }
               {basicFields.map((field, index) => (
                 <div key={field.id ?? `field-${index}`} className={cn(
                   field.width === "half" ? "col-span-1" :

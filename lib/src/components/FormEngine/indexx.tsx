@@ -36,13 +36,21 @@ export function FormEngine({
 }: FormEngineProps) {
   const { init, form, submitted } = useFormEngineStore();
 
+  // Holds the last submit error so the form can display it in-place.
+  // We deliberately do NOT throw — throwing bypasses this component and
+  // surfaces in the Next.js dev overlay (or swallows silently in prod).
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
+
   useEffect(() => {
     init(manifest, formId, initialAnswers, context);
-  // initialAnswers is intentionally excluded from the dep array:
-  // re-initialising on every parent render would reset in-progress answers.
-  // If callers need to change initialAnswers, they should also change formId.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // initialAnswers is intentionally excluded from the dep array:
+    // re-initialising on every parent render would reset in-progress answers.
+    // If callers need to change initialAnswers, they should also change formId.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manifest.manifest_id, formId]);
+
+  // Clear the error banner whenever the user switches form
+  useEffect(() => { setSubmitError(null); }, [formId]);
 
   if (!form) return (
     <div className="flex items-center justify-center p-12 text-gray-400">
@@ -50,7 +58,10 @@ export function FormEngine({
     </div>
   );
 
-  if (submitted) {
+  // Only show success when there is NO submit error.
+  // If onSubmit threw, `submitted` may have been set by the store already,
+  // so we gate on submitError being null as well.
+  if (submitted && !submitError) {
     const msg = form.on_submit?.success_message ?? "Form submitted successfully!";
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
@@ -64,13 +75,70 @@ export function FormEngine({
     );
   }
 
+  /**
+   * Wraps the caller's onSubmit so that:
+   *  • A thrown Error is caught, stored in state, and re-thrown so the layout
+   *    knows not to advance / mark submitted.
+   *  • On success the error banner is cleared.
+   *
+   * Re-throwing is intentional: the layouts use the rejection to avoid calling
+   * the store's markSubmitted action. We only suppress it from reaching
+   * Next.js's global handler — the layouts' own try/catch handles it locally.
+   */
+  const wrappedOnSubmit = onSubmit
+    ? async (payload: FieldAnswers) => {
+        setSubmitError(null);
+        try {
+          await onSubmit(payload);
+          // success — banner stays clear, success screen will render
+        } catch (err: unknown) {
+          const msg =
+            err instanceof Error
+              ? err.message
+              : typeof err === "string"
+              ? err
+              : "Submission failed. Please try again.";
+          setSubmitError(msg);
+          // No re-throw needed: the `submitted && !submitError` gate above
+          // blocks the success screen even if the layout calls markSubmitted().
+          // Both setSubmitError and the store update are queued before the next
+          // render, so React sees them together and the gate holds.
+        }
+      }
+    : undefined;
+
+  const errorBanner = submitError ? (
+    <div
+      role="alert"
+      className="mb-4 flex items-start gap-2.5 rounded-xl px-4 py-3 text-sm"
+      style={{
+        background: "rgba(239,68,68,.07)",
+        border: "1px solid rgba(239,68,68,.22)",
+        color: "#dc2626",
+      }}
+    >
+      <span className="flex-shrink-0 mt-0.5">⚠️</span>
+      <span className="font-medium leading-snug">{submitError}</span>
+    </div>
+  ) : null;
+
   if (form.layout.type === "wizard" && form.pages?.length) {
-    return <WizardLayout manifest={manifest} form={form} formId={formId}
-      onSubmit={onSubmit} onDraftSave={onDraftSave} readOnly={readOnly} />;
+    return (
+      <>
+        {errorBanner}
+        <WizardLayout manifest={manifest} form={form} formId={formId}
+          onSubmit={wrappedOnSubmit} onDraftSave={onDraftSave} readOnly={readOnly} />
+      </>
+    );
   }
 
-  return <SinglePageLayout manifest={manifest} form={form} formId={formId}
-    onSubmit={onSubmit} onDraftSave={onDraftSave} readOnly={readOnly} />;
+  return (
+    <>
+      {errorBanner}
+      <SinglePageLayout manifest={manifest} form={form} formId={formId}
+        onSubmit={wrappedOnSubmit} onDraftSave={onDraftSave} readOnly={readOnly} />
+    </>
+  );
 }
 
 // ─── Universal Field Router ───────────────────────────────────────────────────

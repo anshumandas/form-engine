@@ -130,10 +130,10 @@ export function FieldWrapper({
 }: FieldWrapperProps) {
   return (
     <div className={cn(
-      "flex flex-col gap-1.5 p-4",
+      className,
+      "flex flex-col gap-1.5 p-4 col-span-2",
       width === "half" && "col-span-1",
       width === "third" && "col-span-1",
-      className
     )}>
       {label && (
         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -170,13 +170,14 @@ export function TextFieldRenderer({ field, value, onChange, onBlur, errors, disa
     <FieldWrapper label={f.label} required={f.required} hint={f.hint}
       description={f.description} errors={errors} width={f.width}>
       <input
-        type={inputType}
+        type={f.confidentiality === "Secret" ? "password" : inputType}
         value={String(value ?? "")}
         onChange={e => onChange(e.target.value)}
         onBlur={onBlur}
         placeholder={f.placeholder}
         autoComplete={f.autocomplete}
         disabled={disabled || f.disabled}
+        
         readOnly={f.readonly}
         maxLength={f.max_length}
         className={cn(

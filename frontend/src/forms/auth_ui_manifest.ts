@@ -51,6 +51,7 @@ export const authUIManifest: UISystemManifest = {
               required: true,
               placeholder: "you@company.com",
               autocomplete: "email",
+              width: "full"
             },
             {
               id: "password",
@@ -59,7 +60,9 @@ export const authUIManifest: UISystemManifest = {
               required: true,
               placeholder: "········",
               min_length: 6,
+              confidentiality: "Secret",
               autocomplete: "current-password",
+              width: "full"
             },
           ],
         },
@@ -84,6 +87,7 @@ export const authUIManifest: UISystemManifest = {
               required: true,
               placeholder: "Jane Smith",
               autocomplete: "name",
+              width: "full"
             },
             {
               id: "email",
@@ -92,6 +96,7 @@ export const authUIManifest: UISystemManifest = {
               required: true,
               placeholder: "you@company.com",
               autocomplete: "email",
+              width: "full"
             },
             {
               id: "password",
@@ -99,9 +104,11 @@ export const authUIManifest: UISystemManifest = {
               label: "Password",
               required: true,
               placeholder: "········",
+              confidentiality: "Secret",
               min_length: 8,
               hint: "At least 8 characters",
               autocomplete: "new-password",
+              width: "full"
             },
             {
               id: "confirm_password",
@@ -110,6 +117,8 @@ export const authUIManifest: UISystemManifest = {
               required: true,
               placeholder: "········",
               autocomplete: "new-password",
+              confidentiality: "Secret",
+              width: "full"
             },
           ],
         },

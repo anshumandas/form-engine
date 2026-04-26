@@ -100,6 +100,7 @@ forms:
                 required: true
                 placeholder: "you@company.com"
                 autocomplete: "email"
+                width: "full"
                 validation:
                   pattern: "^[\\w.+-]+@[\\w-]+\\.[a-zA-Z]{2,}$"
                   pattern_message: "Please enter a valid email address"
@@ -110,6 +111,8 @@ forms:
                 required: true
                 placeholder: "••••••••"
                 autocomplete: "current-password"
+                confidentiality: Secret
+                width: "full"
                 validation:
                   min_length: 6
                   min_length_message: "Password must be at least 6 characters"
