@@ -11,14 +11,22 @@ import {
 } from "./fields/FieldRenderers";
 import { WizardLayout } from "./layouts/WizardLayout";
 import { SinglePageLayout } from "./layouts/SinglePageLayout";
-import type { FormSubmissionResponse } from "../../libs/types";
 
 interface FormEngineProps {
   manifest: FormManifest;
   formId: string;
   initialAnswers?: FieldAnswers;
   context?: FormContext;
-  onSubmit?: (payload: FieldAnswers, response?: FormSubmissionResponse) => Promise<void> | void;
+  /**
+   * Called after the form is validated and the user submits.
+   * The library passes the filtered payload — send it to your backend here.
+   * Throw an Error to surface a message to the user.
+   */
+  onSubmit?: (payload: FieldAnswers) => Promise<void> | void;
+  /**
+   * Called when the user saves a draft.
+   * Persisting the draft is entirely the app's responsibility.
+   */
   onDraftSave?: (answers: FieldAnswers) => Promise<void> | void;
   readOnly?: boolean;
 }

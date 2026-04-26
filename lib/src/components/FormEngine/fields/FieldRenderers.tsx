@@ -7,7 +7,6 @@ import type {
   StaticChoice,
 } from "../../../libs/types";
 import { cn } from "../../../libs/utils";
-import { resolveApiUrl } from "../../../libs/config";
 
 // ─── Dynamic choices config (mirrors DynamicChoicesConfig in schema) ──────────
 interface DynamicChoicesConfig {
@@ -53,14 +52,9 @@ function useDynamicChoices(config: DynamicChoicesConfig | null): {
     setLoading(true);
     setError(null);
 
-    const apiBase =
-      typeof process !== "undefined"
-        ? (process.env?.NEXT_PUBLIC_API_URL ?? "")
-        : "";
-
-    const url = config.url.startsWith("http")
-      ? config.url
-      : resolveApiUrl(config.url);
+    // Absolute URLs are used as-is. Relative URLs (e.g. "/api/choices")
+    // resolve against the current origin — the browser handles it natively.
+    const url = config.url;
 
     fetch(url, {
       method: config.method ?? "GET",

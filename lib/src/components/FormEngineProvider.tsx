@@ -4,23 +4,31 @@
  * FormEngineProvider
  *
  * Wrap your application (or just the part that uses the Form Engine) with this
- * provider to configure the backend URL, local manifests, auth handlers, etc.
+ * provider to supply local manifests and global submit/draft-save handlers.
  *
- * This component bridges the React context world with the module-level
- * config singleton so that both React components and non-React utilities
- * (like api.ts) pick up the same configuration.
+ * The library has no backend of its own. All network I/O goes through the
+ * callbacks you pass here (or directly as props on <FormEngine>).
  *
  * @example
- * // In your root layout or _app:
- * <FormEngineProvider config={{
- *   apiBase: process.env.NEXT_PUBLIC_API_URL,
- *   localManifests: { auth: authManifest },
- *   auth: {
- *     signinUrl: "/api/auth/signin",
- *     onSuccess: (action, data) => router.push("/dashboard"),
- *   },
- * }}>
- *   {children}
+ * // Minimal — local manifests only, no backend calls
+ * <FormEngineProvider config={{ localManifests: { onboarding: manifest } }}>
+ *   <App />
+ * </FormEngineProvider>
+ *
+ * @example
+ * // With a global submit handler that talks to your API
+ * <FormEngineProvider
+ *   config={{
+ *     localManifests: { onboarding: manifest },
+ *     onSubmit: async (manifestId, formId, answers) => {
+ *       await myApi.post("/submissions", { manifestId, formId, answers });
+ *     },
+ *     onDraftSave: async (manifestId, formId, answers) => {
+ *       localStorage.setItem(`draft:${formId}`, JSON.stringify(answers));
+ *     },
+ *   }}
+ * >
+ *   <App />
  * </FormEngineProvider>
  */
 
@@ -38,7 +46,8 @@ interface FormEngineProviderProps {
 
 export function FormEngineProvider({ config, children }: FormEngineProviderProps) {
   // Sync React context → module-level singleton on every config change.
-  // This ensures api.ts (which can't use hooks) also sees the latest config.
+  // This ensures hooks and layout components (which can't use React context
+  // directly) also see the latest config.
   useEffect(() => {
     configureFormEngine(config);
   }, [config]);

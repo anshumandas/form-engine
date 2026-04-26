@@ -1,18 +1,27 @@
 "use client";
 
 import React, { useState } from "react";
-import type { FormManifest, FormDef, FieldAnswers, FormSubmissionResponse, Section } from "../../../libs/types";
+import type { FormManifest, FormDef, FieldAnswers, Section } from "../../../libs/types";
 import { useFormEngineStore } from "../../../store/form-engine-store";
+import { getConfig } from "../../../libs/config";
 import { FieldRouter } from "../index";
 import { CollectionRenderer, ProFieldsSection } from "../CollectionRenderer";
-import { api } from "../../../../../frontend/src/libs/api";
 import { cn } from "../../../libs/utils";
 
 interface LayoutProps {
   manifest: FormManifest;
   form: FormDef;
   formId: string;
-  onSubmit?: (payload: FieldAnswers, response?: FormSubmissionResponse) => Promise<void> | void;
+  /**
+   * Called after a successful submit on the final wizard page.
+   * The library never calls a backend — this is the app's entry point for
+   * sending data. Throw to surface an error to the user.
+   */
+  onSubmit?: (payload: FieldAnswers) => Promise<void> | void;
+  /**
+   * Called when the user clicks "Save Draft".
+   * Persisting the draft is entirely the app's responsibility.
+   */
   onDraftSave?: (answers: FieldAnswers) => Promise<void> | void;
   readOnly?: boolean;
 }
@@ -47,25 +56,19 @@ export function WizardLayout({ manifest, form, formId, onSubmit, onDraftSave, re
     setSubmitting(true);
     try {
       const payload = getSubmitPayload();
-      const submitAction = form.on_submit;
-      if (submitAction?.type === "rest" && submitAction.url) {
-        const response = await api.submit({
-          form_id: formId,
-          manifest_id: manifest.manifest_id,
-          answers: payload,
-          context: useFormEngineStore.getState().context,
-        });
-        if (response.status === "accepted") {
-          await onSubmit?.(payload, response);
-          setSubmitted(true);
-        }
-      } else {
-        if (onSubmit) {
-          await onSubmit(payload);
-        } else {
-          setSubmitted(true);
-        }
+
+      // Resolve handler: per-form prop → global config → mark submitted locally
+      const handler =
+        onSubmit ??
+        (getConfig().onSubmit
+          ? (p: FieldAnswers) =>
+              getConfig().onSubmit!(manifest.manifest_id ?? "", formId, p)
+          : null);
+
+      if (handler) {
+        await handler(payload);
       }
+      setSubmitted(true);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Submission failed. Please try again.";
       setSubmitError(message);
@@ -77,10 +80,20 @@ export function WizardLayout({ manifest, form, formId, onSubmit, onDraftSave, re
 
   const handleDraftSave = async () => {
     const answers = useFormEngineStore.getState().answers;
-    await onDraftSave?.(answers);
-    try {
-      await api.submit({ form_id: formId, manifest_id: manifest.manifest_id, answers, draft: true });
-    } catch { /* silent */ }
+
+    // Per-form prop takes precedence over global config
+    const handler =
+      onDraftSave ??
+      (getConfig().onDraftSave
+        ? (a: FieldAnswers) =>
+            getConfig().onDraftSave!(manifest.manifest_id ?? "", formId, a)
+        : null);
+
+    if (handler) {
+      try {
+        await handler(answers);
+      } catch { /* surface errors via onDraftSave caller; silent here */ }
+    }
   };
 
   if (!currentPage) return null;
@@ -162,7 +175,8 @@ export function WizardLayout({ manifest, form, formId, onSubmit, onDraftSave, re
               ← Back
             </button>
           )}
-          {onDraftSave && (
+          {/* Only show draft button when a handler is wired up */}
+          {(onDraftSave ?? getConfig().onDraftSave) && (
             <button
               type="button"
               onClick={handleDraftSave}
@@ -207,11 +221,10 @@ export function WizardLayout({ manifest, form, formId, onSubmit, onDraftSave, re
   );
 }
 
-// ─── Section renderer with pro-fields support ────────────────────────────────
+// ─── Section renderer with pro-fields support ─────────────────────────────────
 export function SectionRenderer({ section }: { section: Section }) {
   const { getVisibleFields } = useFormEngineStore();
 
-  // Collection sections render differently
   if (section.collection) {
     return (
       <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">

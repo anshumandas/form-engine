@@ -2,86 +2,114 @@
  * useFormEngine — convenience hook for components that want to interact
  * with the form engine store without direct Zustand imports.
  *
+ * Backend connectivity is NOT handled here. Pass an `onSubmit` callback
+ * to FormEngine (or set one via FormEngineProvider / configureFormEngine)
+ * to wire in your own API layer.
+ *
  * Usage:
  *   const { answers, setAnswer, errors, submit } = useFormEngine();
  */
 import { useCallback } from "react";
 import { useFormEngineStore } from "../store/form-engine-store";
-import { api } from "../../../frontend/src/libs/api";
-import type { FieldAnswers, FormContext, FormManifest, FormSubmissionResponse } from "../libs/types";
+import { getConfig } from "../libs/config";
+import type { FieldAnswers, FormContext, FormManifest } from "../libs/types";
+
+// ─── Return type ──────────────────────────────────────────────────────────────
+
+export interface SubmitResult {
+  /** true if the form was valid and onSubmit resolved without throwing */
+  ok: boolean;
+  /** The filtered, validated payload that was passed to onSubmit */
+  payload: FieldAnswers;
+  /** Whatever the onSubmit handler returned (undefined if none was set) */
+  data?: unknown;
+  /** Error thrown by onSubmit, if any */
+  error?: Error;
+}
 
 export interface UseFormEngineReturn {
-  // State
+  // ─── State ──────────────────────────────────────────────────────────────────
   answers: FieldAnswers;
   errors: Record<string, string[]>;
   currentPageIndex: number;
   submitting: boolean;
   submitted: boolean;
 
-  // Field interaction
+  // ─── Field interaction ───────────────────────────────────────────────────────
   setAnswer: (fieldId: string, value: unknown) => void;
   touchField: (fieldId: string) => void;
   getFieldError: (fieldId: string) => string[];
 
-  // Navigation
+  // ─── Navigation ──────────────────────────────────────────────────────────────
   nextPage: () => boolean;
   prevPage: () => void;
   goToPage: (index: number) => void;
 
-  // Submission
+  // ─── Submission ──────────────────────────────────────────────────────────────
+  /**
+   * Validate the form and call the onSubmit handler (from config or the
+   * optional `onSubmit` override argument).
+   *
+   * The hook never calls any backend directly — that is the caller's job.
+   */
   submit: (opts?: {
-    manifestId?: string;
     formId?: string;
+    manifestId?: string;
     draft?: boolean;
     context?: FormContext;
-  }) => Promise<FormSubmissionResponse | null>;
+    /** Per-call override — takes precedence over the global config.onSubmit */
+    onSubmit?: (manifestId: string, formId: string, answers: FieldAnswers) => Promise<unknown>;
+  }) => Promise<SubmitResult>;
 
-  // Utilities
+  // ─── Utilities ───────────────────────────────────────────────────────────────
   reset: () => void;
   validateAll: () => boolean;
   getPayload: () => FieldAnswers;
 }
 
+// ─── Hook ─────────────────────────────────────────────────────────────────────
+
 export function useFormEngine(): UseFormEngineReturn {
   const store = useFormEngineStore();
 
   const submit = useCallback(async (opts: {
-    manifestId?: string;
     formId?: string;
+    manifestId?: string;
     draft?: boolean;
     context?: FormContext;
-  } = {}): Promise<FormSubmissionResponse | null> => {
+    onSubmit?: (manifestId: string, formId: string, answers: FieldAnswers) => Promise<unknown>;
+  } = {}): Promise<SubmitResult> => {
     const {
       answers, formId, manifest,
-      validateAllFields, setSubmitting, setSubmitted, getSubmitPayload
+      validateAllFields, setSubmitting, setSubmitted, getSubmitPayload,
     } = useFormEngineStore.getState();
 
-    const fid = opts.formId ?? formId;
-    const mid = opts.manifestId ?? manifest?.manifest_id;
+    const fid = opts.formId ?? formId ?? "";
+    const mid = opts.manifestId ?? manifest?.manifest_id ?? "";
 
-    if (!fid) return null;
+    if (!opts.draft && !validateAllFields()) {
+      return { ok: false, payload: {} };
+    }
 
-    if (!opts.draft && !validateAllFields()) return null;
+    const payload = opts.draft ? answers : getSubmitPayload();
+
+    // Resolve the submit handler: per-call override → global config → none
+    const handler =
+      opts.onSubmit ??
+      getConfig().onSubmit;
 
     setSubmitting(true);
     try {
-      const payload = opts.draft ? answers : getSubmitPayload();
-      const response = await api.submit({
-        form_id: fid,
-        manifest_id: mid,
-        answers: payload,
-        draft: opts.draft,
-        context: opts.context ?? useFormEngineStore.getState().context,
-      });
-
-      if (!opts.draft && response.status === "accepted") {
-        setSubmitted(true);
+      let data: unknown;
+      if (handler) {
+        data = await handler(mid, fid, payload);
       }
-
-      return response;
+      if (!opts.draft) setSubmitted(true);
+      return { ok: true, payload, data };
     } catch (err) {
-      console.error("[useFormEngine] submit error:", err);
-      return null;
+      const error = err instanceof Error ? err : new Error(String(err));
+      console.error("[useFormEngine] submit error:", error);
+      return { ok: false, payload, error };
     } finally {
       setSubmitting(false);
     }
@@ -111,21 +139,18 @@ export function useFormEngine(): UseFormEngineReturn {
 
 /**
  * Initialize the form engine for a given manifest + formId.
- * Call this once per form mount.
+ * Call this inside a useEffect in the component mounting the form.
  */
 export function useFormEngineInit(
   manifest: FormManifest | null,
   formId: string | null,
-  options?: { initialAnswers?: FieldAnswers; context?: FormContext }
+  options?: { initialAnswers?: FieldAnswers; context?: FormContext },
 ) {
   const init = useFormEngineStore(s => s.init);
 
-  // Call init reactively when manifest/formId changes
   if (manifest && formId) {
-    // Note: in a real app you'd put this inside a useEffect in the component
-    // This is provided for convenience; see FormEngine/index.tsx for the pattern.
     void (() => init(manifest, formId, options?.initialAnswers, options?.context))();
   }
 
-  return useFormEngineStore() as any;
+  return useFormEngineStore();
 }
