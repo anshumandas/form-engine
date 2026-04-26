@@ -483,11 +483,14 @@ function ScreensPanel({ manifest, builderManifest, selected, onSelect, onUpdate 
         <div className="flex-1 overflow-auto">
           {screenKeys.length === 0 && <p className="text-xs text-gray-400 p-3 text-center">No screens</p>}
           {screenKeys.map(key => (
-            <button
+            <div
               key={key}
+              role="button"
+              tabIndex={0}
               onClick={() => onSelect(key)}
+              onKeyDown={e => e.key === "Enter" && onSelect(key)}
               className={cn(
-                "w-full text-left px-3 py-2.5 text-xs border-b border-gray-100 dark:border-gray-800 flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors group",
+                "w-full text-left px-3 py-2.5 text-xs border-b border-gray-100 dark:border-gray-800 flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors group cursor-pointer select-none",
                 selected === key
                   ? "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300"
                   : "text-gray-700 dark:text-gray-300",
@@ -495,11 +498,12 @@ function ScreensPanel({ manifest, builderManifest, selected, onSelect, onUpdate 
             >
               <span>{screens[key].is_home ? "🏠" : "📱"}</span>
               <span className="truncate flex-1 font-medium">{screens[key].label ?? key}</span>
-              <button type="button"
+              <button
+                type="button"
                 onClick={e => { e.stopPropagation(); deleteScreen(key); }}
                 className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 text-base"
               >×</button>
-            </button>
+            </div>
           ))}
         </div>
 
@@ -1106,11 +1110,14 @@ function ThemesPanel({ manifest, builderManifest, selected, onSelect, onUpdate }
         <div className="flex-1 overflow-auto">
           {themeKeys.length === 0 && <p className="text-xs text-gray-400 p-3 text-center">No custom themes</p>}
           {themeKeys.map(key => (
-            <button
+            <div
               key={key}
+              role="button"
+              tabIndex={0}
               onClick={() => onSelect(key)}
+              onKeyDown={e => e.key === "Enter" && onSelect(key)}
               className={cn(
-                "w-full text-left px-3 py-2.5 text-xs border-b border-gray-100 dark:border-gray-800 flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors group",
+                "w-full text-left px-3 py-2.5 text-xs border-b border-gray-100 dark:border-gray-800 flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors group cursor-pointer select-none",
                 selected === key
                   ? "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300"
                   : "text-gray-700 dark:text-gray-300",
@@ -1121,9 +1128,12 @@ function ThemesPanel({ manifest, builderManifest, selected, onSelect, onUpdate }
                   style={{ background: `#${themes[key].preview_color}` }} />
               )}
               <span className="truncate flex-1 font-medium">{themes[key].label ?? key}</span>
-              <button onClick={e => { e.stopPropagation(); deleteTheme(key); }}
-                className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 text-base">×</button>
-            </button>
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); deleteTheme(key); }}
+                className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 text-base"
+              >×</button>
+            </div>
           ))}
         </div>
 

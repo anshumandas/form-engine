@@ -508,7 +508,7 @@ function CategoryCard({ manifest, onDelete, onRename, deleting }: {
   const [addMenuOpen, setAddMenuOpen] = useState(false);
 
   return (
-    <div className="form-card overflow-hidden">
+    <div className="form-card">
       {/* Category header */}
       <div className="px-6 py-4 flex items-center justify-between border-b border-gray-100 dark:border-gray-800">
         <div className="flex items-center gap-3 min-w-0">
@@ -611,7 +611,7 @@ function CategoryCard({ manifest, onDelete, onRename, deleting }: {
           {addMenuOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setAddMenuOpen(false)} />
-              <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-20 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1.5 w-52">
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1.5 w-52">
                 <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider px-4 py-1">Add to {displayName}</p>
                 <Link
                   href={`/create?category=${manifest.manifest_id}`}

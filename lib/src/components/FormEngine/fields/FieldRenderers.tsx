@@ -130,7 +130,7 @@ export function FieldWrapper({
 }: FieldWrapperProps) {
   return (
     <div className={cn(
-      "flex flex-col gap-1.5",
+      "flex flex-col gap-1.5 p-4",
       width === "half" && "col-span-1",
       width === "third" && "col-span-1",
       className
