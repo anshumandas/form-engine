@@ -22,28 +22,20 @@ const nextConfig = {
       {
         source: "/(.*)",
         headers: [
-          // Prevent clickjacking
           { key: "X-Frame-Options", value: "DENY" },
-          // Prevent MIME sniffing
           { key: "X-Content-Type-Options", value: "nosniff" },
-          // Referrer policy
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          // XSS protection (legacy browsers)
           { key: "X-XSS-Protection", value: "1; mode=block" },
-          // Permissions policy
           {
             key: "Permissions-Policy",
             value: "camera=(), microphone=(), geolocation=(self), payment=()",
           },
-          // Content Security Policy
-          // NOTE: unsafe-eval is intentionally added — required for Next.js dev hot-reloading.
-          // unsafe-inline is limited to styles only (required by Tailwind inline styles).
           {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",   // Next.js needs unsafe-eval for dev hot-reload
-              "style-src 'self' 'unsafe-inline'",    // Tailwind inline styles
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+              "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob:",
               "font-src 'self' data:",
               "connect-src 'self' http://localhost:8000 http://127.0.0.1:8000 https://api.anthropic.com",
@@ -58,10 +50,32 @@ const nextConfig = {
 
   // ── Dev proxy to FastAPI backend ────────────────────────────────────────────
   async rewrites() {
+    const backend = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
     return [
+      // Auth API — MUST come before the general /api/* rule.
+      //
+      // Why /api/auth/* instead of /auth/*?
+      //   Next.js has a page at route /auth. Rewriting /auth/:path* here
+      //   would intercept that page (Next.js :path* matches zero segments),
+      //   proxying the login page to FastAPI instead of rendering it.
+      //   Fronting it with /api/auth/* avoids any page-route collision.
+      //
+      // Why must it come before /api/*?
+      //   /api/:path* also matches /api/auth/* but rewrites the destination
+      //   to /api/auth/* on the backend — which doesn't exist there.
+      //   This specific rule rewrites to /auth/* on the backend instead.
+      {
+        source: "/auth/:path*",
+        destination: `${backend}/auth/:path*`,
+      },
+      {
+        source: "/api/auth/:path*",
+        destination: `${backend}/auth/:path*`,
+      },
+      // General API proxy — forms, submissions, categories, etc.
       {
         source: "/api/:path*",
-        destination: `${process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000"}/api/:path*`,
+        destination: `${backend}/api/:path*`,
       },
     ];
   },

@@ -48,5 +48,3 @@ export {
   type LayoutProps,
 } from './layout';
 
-// Import and re-export UIBuilder component
-export { UIBuilder } from '../UIBuilder';

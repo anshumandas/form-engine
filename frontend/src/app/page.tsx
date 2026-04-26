@@ -57,7 +57,6 @@ function NewCategoryModal({ onClose, onCreate }: NewCategoryModalProps) {
 
   useEffect(() => { nameRef.current?.focus(); }, []);
 
-  // Auto-derive ID from name unless user has manually edited it
   const handleNameChange = (v: string) => {
     setName(v);
     if (!idTouched) {
@@ -95,26 +94,19 @@ function NewCategoryModal({ onClose, onCreate }: NewCategoryModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-
-      {/* Modal */}
       <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md border border-gray-200 dark:border-gray-700 animate-slide-up">
         <div className="p-6 border-b border-gray-100 dark:border-gray-800">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-bold text-gray-900 dark:text-white">New Category</h2>
-              <p className="text-sm text-gray-500 mt-0.5">
-                A category groups related forms together.
-              </p>
+              <p className="text-sm text-gray-500 mt-0.5">A category groups related forms and UI screens together.</p>
             </div>
-            <button onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 text-2xl leading-none p-1">×</button>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none p-1">×</button>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {/* Name */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
               Category Name <span className="text-red-500">*</span>
@@ -128,7 +120,6 @@ function NewCategoryModal({ onClose, onCreate }: NewCategoryModalProps) {
             />
           </div>
 
-          {/* Category ID */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
               Category ID <span className="text-red-500">*</span>
@@ -146,23 +137,13 @@ function NewCategoryModal({ onClose, onCreate }: NewCategoryModalProps) {
                 )}
               />
               {catId && (
-                <span className={cn(
-                  "absolute right-3 top-1/2 -translate-y-1/2 text-sm",
-                  idValid ? "text-green-500" : "text-red-400"
-                )}>
+                <span className={cn("absolute right-3 top-1/2 -translate-y-1/2 text-sm", idValid ? "text-green-500" : "text-red-400")}>
                   {idValid ? "✓" : "✗"}
                 </span>
               )}
             </div>
-            <p className="text-xs text-gray-400 mt-1">
-              Lowercase letters, numbers, underscores. Used in URLs and the API.
-            </p>
-            {catId && !idValid && (
-              <p className="text-xs text-red-500 mt-1">Must start with a letter and contain only a–z, 0–9, _</p>
-            )}
           </div>
 
-          {/* Description */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
               Description <span className="text-gray-400 font-normal">(optional)</span>
@@ -170,19 +151,15 @@ function NewCategoryModal({ onClose, onCreate }: NewCategoryModalProps) {
             <textarea
               value={description}
               onChange={e => setDescription(e.target.value)}
-              placeholder="A short description of what forms this category contains…"
+              placeholder="A short description…"
               rows={2}
               className="w-full rounded-xl border border-gray-300 dark:border-gray-600 px-3 py-2.5 text-sm bg-white dark:bg-gray-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
             />
           </div>
 
-          {/* Preview badge */}
           {name && catId && idValid && (
             <div className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700">
-              <div className={cn(
-                "h-9 w-9 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0 bg-gradient-to-br",
-                categoryColor(catId)
-              )}>
+              <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0 bg-gradient-to-br", categoryColor(catId))}>
                 {name.slice(0, 2).toUpperCase()}
               </div>
               <div>
@@ -193,11 +170,8 @@ function NewCategoryModal({ onClose, onCreate }: NewCategoryModalProps) {
           )}
 
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 btn-secondary justify-center">
-              Cancel
-            </button>
-            <button type="submit" disabled={!canSubmit}
-              className="flex-1 btn-primary justify-center">
+            <button type="button" onClick={onClose} className="flex-1 btn-secondary justify-center">Cancel</button>
+            <button type="submit" disabled={!canSubmit} className="flex-1 btn-primary justify-center">
               {saving ? (
                 <span className="flex items-center gap-2">
                   <span className="h-3.5 w-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
@@ -313,7 +287,7 @@ export default function HomePage() {
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Delete category "${name}"?\nThis will also remove all ${manifests.find(m => m.manifest_id === id)?.forms.length ?? 0} form(s) inside it. This cannot be undone.`)) return;
+    if (!confirm(`Delete category "${name}"?\nThis cannot be undone.`)) return;
     setDeletingId(id);
     try {
       await api.deleteManifest(id);
@@ -324,7 +298,6 @@ export default function HomePage() {
   };
 
   const handleCategoryCreated = (cat: CategorySummary) => {
-    // Add an empty ManifestSummary for the new category so it appears instantly
     setManifests(prev => [...prev, {
       manifest_id: cat.category_id,
       manifest_version: "4.0.0",
@@ -373,7 +346,18 @@ export default function HomePage() {
               <span className="text-base leading-none">＋</span>
               New Category
             </button>
+
+            {/* Form Builder */}
             <Link href="/create" className="btn-secondary text-sm">⚡ Form Builder</Link>
+
+            {/* UI Builder — new */}
+            <Link
+              href="/ui-builder"
+              className="btn-secondary text-sm gap-1.5 border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20"
+            >
+              🏗 UI Builder
+            </Link>
+
             <Link href="/chat" className="btn-secondary text-sm">💬 AI Chat</Link>
             <label className="btn-secondary text-sm cursor-pointer">
               {uploading ? (
@@ -382,11 +366,9 @@ export default function HomePage() {
                   Uploading…
                 </span>
               ) : "⬆ Import"}
-              <input type="file" accept=".yaml,.yml,.json" className="sr-only"
-                onChange={handleUpload} disabled={uploading} />
+              <input type="file" accept=".yaml,.yml,.json" className="sr-only" onChange={handleUpload} disabled={uploading} />
             </label>
 
-            {/* User badge + signout */}
             {user && <UserBadge user={user} onSignout={handleSignout} />}
           </div>
         </div>
@@ -394,11 +376,12 @@ export default function HomePage() {
 
       <main className="max-w-6xl mx-auto px-6 py-8">
         {/* Stats bar */}
-        <div className="grid grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-4 gap-4 mb-8">
           {[
             { label: "Categories", value: manifests.length, icon: "🗂", color: "text-blue-600" },
             { label: "Total Forms", value: totalForms, icon: "📋", color: "text-violet-600" },
             { label: "Active Forms", value: activeForms, icon: "✅", color: "text-emerald-600" },
+            { label: "UI Manifests", value: manifests.filter(m => (m as ManifestSummary & { screens?: unknown }).screens).length, icon: "🏗", color: "text-purple-600" },
           ].map(s => (
             <div key={s.label} className="form-card p-5">
               <div className="flex items-center gap-4">
@@ -440,14 +423,12 @@ export default function HomePage() {
         )}
       </main>
 
-      {/* Submissions quick link */}
       <div className="max-w-6xl mx-auto px-6 pb-8 text-center">
         <Link href="/submissions" className="text-sm text-gray-400 hover:text-blue-500 transition-colors">
           View all submissions →
         </Link>
       </div>
 
-      {/* Modals */}
       {showNewModal && (
         <NewCategoryModal onClose={() => setShowNewModal(false)} onCreate={handleCategoryCreated} />
       )}
@@ -469,10 +450,7 @@ export default function HomePage() {
 }
 
 // ─── User Badge ───────────────────────────────────────────────────────────────
-function UserBadge({ user, onSignout }: {
-  user: { email: string; name?: string };
-  onSignout: () => void;
-}) {
+function UserBadge({ user, onSignout }: { user: { email: string; name?: string }; onSignout: () => void }) {
   const [open, setOpen] = useState(false);
   const initials = (user.name ?? user.email)
     .split(/[\s@]/).filter(Boolean).slice(0, 2)
@@ -483,7 +461,6 @@ function UserBadge({ user, onSignout }: {
       <button
         onClick={() => setOpen(o => !o)}
         className="flex items-center gap-2 rounded-xl px-2.5 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-        aria-label="Account menu"
       >
         <div className="h-7 w-7 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
           {initials || "?"}
@@ -500,11 +477,8 @@ function UserBadge({ user, onSignout }: {
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute right-0 top-10 z-20 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1 w-52">
-            {/* User info */}
             <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-800">
-              <p className="text-xs font-semibold text-gray-800 dark:text-white truncate">
-                {user.name ?? "—"}
-              </p>
+              <p className="text-xs font-semibold text-gray-800 dark:text-white truncate">{user.name ?? "—"}</p>
               <p className="text-xs text-gray-400 truncate">{user.email}</p>
             </div>
             <button
@@ -531,17 +505,14 @@ function CategoryCard({ manifest, onDelete, onRename, deleting }: {
     ?? manifest.manifest_id.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
   const grad = categoryColor(manifest.manifest_id);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
 
   return (
     <div className="form-card overflow-hidden">
       {/* Category header */}
       <div className="px-6 py-4 flex items-center justify-between border-b border-gray-100 dark:border-gray-800">
         <div className="flex items-center gap-3 min-w-0">
-          {/* Gradient avatar */}
-          <div className={cn(
-            "h-10 w-10 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0 bg-gradient-to-br shadow-sm",
-            grad
-          )}>
+          <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0 bg-gradient-to-br shadow-sm", grad)}>
             {displayName.slice(0, 2).toUpperCase()}
           </div>
           <div className="min-w-0">
@@ -559,41 +530,48 @@ function CategoryCard({ manifest, onDelete, onRename, deleting }: {
         </div>
 
         {/* Action menu */}
-        <div className="relative flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <Link href={`/submissions?manifest=${manifest.manifest_id}`}
-              className="text-xs px-3 py-1.5 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors">
-              Submissions
-            </Link>
-            <Link href={`/builder?manifest=${manifest.manifest_id}`}
-              className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-600 dark:text-gray-300">
-              Edit YAML
-            </Link>
-            {/* Kebab menu */}
-            <div className="relative">
-              <button onClick={() => setMenuOpen(o => !o)}
-                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-600 transition-colors">
-                ···
-              </button>
-              {menuOpen && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                  <div className="absolute right-0 top-8 z-20 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1 w-40">
-                    <button onClick={() => { onRename(); setMenuOpen(false); }}
-                      className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200">
-                      ✎ Rename
-                    </button>
-                    <hr className="border-gray-100 dark:border-gray-800 my-1" />
-                    <button
-                      onClick={() => { onDelete(displayName); setMenuOpen(false); }}
-                      disabled={deleting}
-                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-40">
-                      {deleting ? "Deleting…" : "🗑 Delete"}
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Link href={`/submissions?manifest=${manifest.manifest_id}`}
+            className="text-xs px-3 py-1.5 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors">
+            Submissions
+          </Link>
+          <Link href={`/builder?manifest=${manifest.manifest_id}`}
+            className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-600 dark:text-gray-300">
+            Edit YAML
+          </Link>
+
+          {/* UI Builder link for this manifest */}
+          <Link
+            href={`/ui-builder?manifest=${manifest.manifest_id}`}
+            className="text-xs px-3 py-1.5 rounded-lg border border-purple-200 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors text-purple-600 dark:text-purple-400"
+          >
+            🏗 UI
+          </Link>
+
+          {/* Kebab menu */}
+          <div className="relative">
+            <button onClick={() => setMenuOpen(o => !o)}
+              className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-600 transition-colors">
+              ···
+            </button>
+            {menuOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                <div className="absolute right-0 top-8 z-20 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1 w-40">
+                  <button onClick={() => { onRename(); setMenuOpen(false); }}
+                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200">
+                    ✎ Rename
+                  </button>
+                  <hr className="border-gray-100 dark:border-gray-800 my-1" />
+                  <button
+                    onClick={() => { onDelete(displayName); setMenuOpen(false); }}
+                    disabled={deleting}
+                    className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-40">
+                    {deleting ? "Deleting…" : "🗑 Delete"}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -620,14 +598,59 @@ function CategoryCard({ manifest, onDelete, onRename, deleting }: {
           </Link>
         ))}
 
-        {/* Add form tile */}
-        <Link
-          href={`/create?category=${manifest.manifest_id}`}
-          className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 p-4 text-gray-400 hover:border-blue-300 hover:text-blue-500 hover:bg-blue-50/50 transition-all min-h-[110px] group"
-        >
-          <span className="text-2xl group-hover:scale-110 transition-transform">+</span>
-          <span className="text-xs font-medium">Add form</span>
-        </Link>
+        {/* Add tile — now with options for Form OR UI */}
+        <div className="relative">
+          <button
+            onClick={() => setAddMenuOpen(o => !o)}
+            className="w-full flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 p-4 text-gray-400 hover:border-blue-300 hover:text-blue-500 hover:bg-blue-50/50 transition-all min-h-[110px] group"
+          >
+            <span className="text-2xl group-hover:scale-110 transition-transform">+</span>
+            <span className="text-xs font-medium">Add to category</span>
+          </button>
+
+          {addMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setAddMenuOpen(false)} />
+              <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-20 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1.5 w-52">
+                <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider px-4 py-1">Add to {displayName}</p>
+                <Link
+                  href={`/create?category=${manifest.manifest_id}`}
+                  onClick={() => setAddMenuOpen(false)}
+                  className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  <span className="text-lg">⚡</span>
+                  <div>
+                    <p className="font-medium text-sm">New Form</p>
+                    <p className="text-xs text-gray-400">Form builder wizard</p>
+                  </div>
+                </Link>
+                <Link
+                  href={`/builder?category=${manifest.manifest_id}`}
+                  onClick={() => setAddMenuOpen(false)}
+                  className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  <span className="text-lg">📝</span>
+                  <div>
+                    <p className="font-medium text-sm">Form via YAML</p>
+                    <p className="text-xs text-gray-400">Advanced YAML editor</p>
+                  </div>
+                </Link>
+                <hr className="border-gray-100 dark:border-gray-800 my-1" />
+                <Link
+                  href={`/ui-builder?manifest=${manifest.manifest_id}`}
+                  onClick={() => setAddMenuOpen(false)}
+                  className="flex items-center gap-3 px-4 py-2.5 text-sm text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20"
+                >
+                  <span className="text-lg">🏗</span>
+                  <div>
+                    <p className="font-medium text-sm">UI Builder</p>
+                    <p className="text-xs text-purple-400">Screens, components, nav</p>
+                  </div>
+                </Link>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -645,14 +668,14 @@ function EmptyState({ onNew, onUpload }: {
       </div>
       <h2 className="text-xl font-bold text-gray-700 dark:text-gray-200 mb-2">No categories yet</h2>
       <p className="text-gray-400 mb-8 max-w-sm text-sm leading-relaxed">
-        Categories group related forms together. Create your first category, then add forms to it
-        using the Form Builder or YAML editor.
+        Categories group forms and UI screens together. Create your first category, then add forms or build a full UI with the UI Builder.
       </p>
       <div className="flex flex-wrap gap-3 justify-center">
         <button onClick={onNew} className="btn-primary gap-2">
           <span>＋</span> New Category
         </button>
         <Link href="/create" className="btn-secondary">⚡ Form Builder</Link>
+        <Link href="/ui-builder" className="btn-secondary border-purple-200 text-purple-700 hover:bg-purple-50">🏗 UI Builder</Link>
         <label className="btn-secondary cursor-pointer">
           ⬆ Import YAML
           <input type="file" accept=".yaml,.yml,.json" className="sr-only" onChange={onUpload} />

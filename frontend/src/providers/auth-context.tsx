@@ -1,16 +1,11 @@
 "use client";
 
 /**
- * AuthContext
+ * AuthContext — client-side auth layer with role support.
  *
- * Lightweight client-side auth layer. Persists the session in:
+ * Persists the session in:
  *   1. localStorage  — survives page reload, readable by React
- *   2. auth-token cookie — readable by Next.js middleware for server-side
- *      redirect before the page even renders (no auth flash)
- *
- * Swap `signin` / `signout` internals for your real token strategy
- * (JWT, opaque token, session cookie from HttpOnly backend, etc.)
- * without touching any consumer component.
+ *   2. auth-token cookie — readable by Next.js middleware (no auth flash)
  */
 
 import React, {
@@ -28,6 +23,7 @@ export interface AuthUser {
   email: string;
   name?: string;
   token: string;
+  role?: string;
 }
 
 interface AuthContextValue {
@@ -35,6 +31,7 @@ interface AuthContextValue {
   /** True while rehydrating from localStorage on first render */
   loading: boolean;
   isAuthenticated: boolean;
+  isAdmin: boolean;
   signin: (user: AuthUser) => void;
   signout: () => void;
 }
@@ -55,15 +52,12 @@ function readStorage(): AuthUser | null {
 
 function writeStorage(user: AuthUser): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
-  // Set a short-lived cookie so middleware can read it server-side.
-  // Path=/ ensures all routes see it; SameSite=Strict prevents CSRF.
   const maxAge = 60 * 60 * 24 * 7; // 7 days
   document.cookie = `${COOKIE_NAME}=${encodeURIComponent(user.token)}; Path=/; Max-Age=${maxAge}; SameSite=Strict`;
 }
 
 function clearStorage(): void {
   localStorage.removeItem(STORAGE_KEY);
-  // Expire the cookie immediately
   document.cookie = `${COOKIE_NAME}=; Path=/; Max-Age=0; SameSite=Strict`;
 }
 
@@ -73,6 +67,7 @@ const AuthContext = createContext<AuthContextValue>({
   user: null,
   loading: true,
   isAuthenticated: false,
+  isAdmin: false,
   signin: () => {},
   signout: () => {},
 });
@@ -83,7 +78,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Rehydrate from localStorage on mount (client only)
   useEffect(() => {
     const stored = readStorage();
     if (stored) setUser(stored);
@@ -101,7 +95,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, loading, isAuthenticated: !!user, signin, signout }),
+    () => ({
+      user,
+      loading,
+      isAuthenticated: !!user,
+      isAdmin: user?.role === "admin",
+      signin,
+      signout,
+    }),
     [user, loading, signin, signout],
   );
 

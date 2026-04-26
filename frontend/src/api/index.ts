@@ -10,16 +10,31 @@ import { getConfig, resolveApiUrl } from "@form-engine/libs/config";
 // Uses relative paths by default (Next.js /api proxy), or an absolute base URL
 // when configured via FormEngineProvider / configureFormEngine().
 
+/** Read the stored auth token from localStorage (client-only). */
+function getAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem("fe_auth_user");
+    if (!raw) return null;
+    const u = JSON.parse(raw) as { token?: string };
+    return u.token ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
   const cfg = getConfig();
   const url = resolveApiUrl(path);
+  const token = getAuthToken();
   try {
     const res = await fetch(url, {
       headers: {
         "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...cfg.headers,
         ...options.headers,
       },
@@ -167,4 +182,23 @@ export const api = {
 
   deleteDraft: (manifestId: string, formId: string): Promise<void> =>
     request(`/api/submissions/drafts/${manifestId}/${formId}`, { method: "DELETE" }),
+};
+
+// ─── Admin API ────────────────────────────────────────────────────────────────
+
+export interface AdminUser {
+  email: string;
+  name?: string;
+  role: string;
+  created_at?: string;
+}
+
+export const adminApi = {
+  /** List all users. Requires admin token. */
+  listUsers: (): Promise<AdminUser[]> =>
+    request("/auth/users"),
+
+  /** Delete a user by email. Requires admin token. */
+  deleteUser: (email: string): Promise<void> =>
+    request(`/auth/users/${encodeURIComponent(email)}`, { method: "DELETE" }),
 };
