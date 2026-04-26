@@ -1,26 +1,93 @@
-manifest_version: "4.0.0"
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  auth_forms.yaml — UISystemManifest v1.0.0                                  ║
+# ║  Auth forms shipped as the backend reference.                               ║
+# ║  The frontend bundles these locally so they render without a network call.  ║
+# ║  The backend honours POST /auth/signin and POST /auth/signup.               ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
 manifest_id: auth
+manifest_version: "1.0.0"
+description: >
+  Sign-in and sign-up forms for the Form Engine auth flow.
+  on_submit.type is local — the page.tsx AuthPageInner component
+  calls /auth/signin or /auth/signup directly via fetch().
 
-# Auth forms are shipped as local manifests (bundled with the frontend) so
-# they render without any network request. This YAML is the backend reference.
+namespaces: [core, uam, form, ui]
 
+engine:
+  mode: reactive
+  evaluation_order: dependency
+  error_mode: collect-all
+  debounce_ms: 200
+
+# ── Navigation routes for auth screens ────────────────────────────────────────
+navigation:
+  type: stack
+  routes:
+    signin_route:
+      screen: signin_screen
+      path: /auth/signin
+      auth_required: false
+    signup_route:
+      screen: signup_screen
+      path: /auth/signup
+      auth_required: false
+
+# ── Screens ───────────────────────────────────────────────────────────────────
+screens:
+  signin_screen:
+    name: SignIn
+    label: Sign In
+    auth_rules:
+      require_auth: false
+    components:
+      - component_ref: signin_form_component
+        direction: Center
+
+  signup_screen:
+    name: SignUp
+    label: Sign Up
+    auth_rules:
+      require_auth: false
+    components:
+      - component_ref: signup_form_component
+        direction: Center
+
+# ── Components ────────────────────────────────────────────────────────────────
+components:
+  signin_form_component:
+    name: SignInFormComponent
+    type: Form
+    form_ref: signin
+    form_embed:
+      mode: inline
+
+  signup_form_component:
+    name: SignUpFormComponent
+    type: Form
+    form_ref: signup
+    form_embed:
+      mode: inline
+
+# ── Forms ─────────────────────────────────────────────────────────────────────
 forms:
 
-  # ─── Sign In ───────────────────────────────────────────────────────────────
+  # ─── Sign In ────────────────────────────────────────────────────────────────
   signin:
-    version: "1.0.0"
-    form_id: signin
     title: "Sign in"
+    version: "1.0.0"
     form_state: active
+    confidentiality: Public
+    access:
+      allowed_role_categories: [Customer, Employee, Partner, Contractor]
     layout:
       type: single-page
-    submit_button:
-      label: "Sign in"
-      loading_label: "Signing in…"
-      position: bottom
+    submit_label: "Sign in"
     on_submit:
       type: local
+      handler_name: handleSignin
       success_message: "Signed in successfully."
+      error_message: "Invalid email or password."
     pages:
       - id: main
         title: "Credentials"
@@ -29,35 +96,40 @@ forms:
             fields:
               - id: email
                 type: text
-                display_as: email
                 label: "Email address"
                 required: true
                 placeholder: "you@company.com"
                 autocomplete: "email"
+                validation:
+                  pattern: "^[\\w.+-]+@[\\w-]+\\.[a-zA-Z]{2,}$"
+                  pattern_message: "Please enter a valid email address"
+
               - id: password
                 type: text
-                display_as: password
                 label: "Password"
                 required: true
                 placeholder: "••••••••"
-                min_length: 6
                 autocomplete: "current-password"
+                validation:
+                  min_length: 6
+                  min_length_message: "Password must be at least 6 characters"
 
-  # ─── Sign Up ───────────────────────────────────────────────────────────────
+  # ─── Sign Up ────────────────────────────────────────────────────────────────
   signup:
-    version: "1.0.0"
-    form_id: signup
     title: "Create account"
+    version: "1.0.0"
     form_state: active
+    confidentiality: Public
+    access:
+      allowed_role_categories: [Customer, Employee, Partner, Contractor]
     layout:
       type: single-page
-    submit_button:
-      label: "Create account"
-      loading_label: "Creating account…"
-      position: bottom
+    submit_label: "Create account"
     on_submit:
       type: local
+      handler_name: handleSignup
       success_message: "Account created. Welcome aboard!"
+      error_message: "Could not create account. Please try again."
     pages:
       - id: main
         title: "Your details"
@@ -71,26 +143,31 @@ forms:
                 placeholder: "Jane Smith"
                 width: full
                 autocomplete: "name"
+
               - id: email
                 type: text
-                display_as: email
                 label: "Email address"
                 required: true
                 placeholder: "you@company.com"
                 width: full
                 autocomplete: "email"
+                validation:
+                  pattern: "^[\\w.+-]+@[\\w-]+\\.[a-zA-Z]{2,}$"
+                  pattern_message: "Please enter a valid email address"
+
               - id: password
                 type: text
-                display_as: password
                 label: "Password"
                 required: true
                 placeholder: "••••••••"
-                min_length: 8
                 hint: "At least 8 characters"
                 autocomplete: "new-password"
+                validation:
+                  min_length: 8
+                  min_length_message: "Password must be at least 8 characters"
+
               - id: confirm_password
                 type: text
-                display_as: password
                 label: "Confirm password"
                 required: true
                 placeholder: "••••••••"

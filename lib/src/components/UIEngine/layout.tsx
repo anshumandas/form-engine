@@ -167,7 +167,7 @@ export const SubComponentPlacementRenderer: React.FC<SubComponentRendererProps> 
     return null;
   }
 
-  const component = manifest.components[placement.component_ref];
+  const component = manifest.components && manifest.components[placement.component_ref];
   if (!component) {
     console.warn(`Component not found: ${placement.component_ref}`);
     return null;

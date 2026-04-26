@@ -215,7 +215,7 @@ function AuthPageInner() {
 
   // ── Sign in ──────────────────────────────────────────────────────────────
   const handleSignin = useCallback(async (answers: FieldAnswers) => {
-    const res = await fetch("/api/auth/signin", {
+    const res = await fetch("/auth/signin", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(answers),
@@ -244,7 +244,7 @@ function AuthPageInner() {
       throw new Error("Passwords do not match");
     }
 
-    const res = await fetch("/api/auth/signup", {
+    const res = await fetch("/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(answers),

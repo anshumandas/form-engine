@@ -137,8 +137,8 @@ export function EmptyStateRenderer({ component }: { component: Component }) {
 
   if (!empty) return null;
 
-  const iconEntry = empty.icon_ref ? manifest.icons[empty.icon_ref] : null;
-  const actionButton = empty.action_ref ? manifest.buttons[empty.action_ref] : null;
+  const iconEntry = empty.icon_ref ? manifest.icons?.[empty.icon_ref] : null;
+  const actionButton = empty.action_ref ? manifest.buttons?.[empty.action_ref] : null;
 
   return (
     <div
@@ -199,8 +199,8 @@ export function ErrorStateRenderer({ component }: { component: Component }) {
 
   if (!error) return null;
 
-  const iconEntry = error.icon_ref ? manifest.icons[error.icon_ref] : null;
-  const retryButton = error.retry_action_ref ? manifest.buttons[error.retry_action_ref] : null;
+  const iconEntry = error.icon_ref ? manifest.icons?.[error.icon_ref] : null;
+  const retryButton = error.retry_action_ref ? manifest.buttons?.[error.retry_action_ref] : null;
 
   return (
     <div
@@ -462,15 +462,12 @@ function FormEngineWrapper({ component, manifest }: FormEngineWrapperProps) {
           />
         }
       >
-        <FormEngineComponent
-          formId={component.form_ref}
+      (component.form_ref != undefined) &&  <FormEngineComponent
+          formId={component.form_ref || ""}
           onSubmit={handleFormSubmit}
-          disabled={isSubmitting}
-          theme={theme}
-          // Pass component settings to FormEngine
-          fields={component.fields}
-          sections={component.sections}
+          readOnly={isSubmitting}
           context={compState}
+          manifest={manifest.id}
         />
       </React.Suspense>
 
@@ -848,11 +845,293 @@ export const ComponentRenderer = React.memo(function ComponentRenderer({
     case ComponentType.Tile:
       content = <TileRenderer component={component} />;
       break;
+    case ComponentType.FileGallery:
+      content = <FileGalleryRenderer component={component} />;
+      break;
+    case ComponentType.FilterBuilder:
+      content = <FilterBuilderRenderer component={component} />;
+      break;
+    case ComponentType.Avatar:
+      content = <AvatarRenderer component={component} />;
+      break;
+    case ComponentType.Custom:
+      content = <CustomRenderer component={component} />;
+      break;
     default:
-      content = <div>Unknown component type: {component.type}</div>;
+      content = <div>Unknown component type: {(component as any).type}</div>;
   }
 
   return <div style={containerStyle}>{content}</div>;
 });
 
 ComponentRenderer.displayName = 'ComponentRenderer';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NEW COMPONENT TYPE RENDERERS (added for ui_system_schema.yaml v1.0.0)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function FileGalleryRenderer({ component }: { component: Component }) {
+  const theme = useTheme();
+  const cfg = component.file_config;
+  const layout = cfg?.layout ?? 'grid';
+
+  const containerStyle: React.CSSProperties =
+    layout === 'grid'
+      ? {
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+          gap: theme.spacing.sm || '8px',
+          padding: theme.spacing.md || '16px',
+          backgroundColor: theme.colors.surface || '#FFFFFF',
+          borderRadius: theme.radius.default || '4px',
+        }
+      : {
+          display: 'flex',
+          flexDirection: 'column',
+          gap: theme.spacing.sm || '8px',
+          padding: theme.spacing.md || '16px',
+          backgroundColor: theme.colors.surface || '#FFFFFF',
+          borderRadius: theme.radius.default || '4px',
+        };
+
+  return (
+    <div>
+      {component.label && (
+        <p
+          style={{
+            margin: `0 0 ${theme.spacing.sm || '8px'} 0`,
+            fontWeight: 'bold',
+            fontSize: theme.typography.scale.body_md || '14px',
+          }}
+        >
+          {component.label}
+        </p>
+      )}
+      <div style={containerStyle}>
+        {/* Placeholder tiles — real implementation would map over fetched file records */}
+        {[1, 2, 3].map((i) => (
+          <div
+            key={i}
+            style={{
+              height: '90px',
+              backgroundColor: theme.colors.surface_variant || '#F5F5F5',
+              borderRadius: theme.radius.default || '4px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '24px',
+              color: theme.colors.on_surface || '#666',
+            }}
+          >
+            📎
+          </div>
+        ))}
+      </div>
+      {(cfg?.upload_enabled) && (
+        <button
+          style={{
+            marginTop: theme.spacing.sm || '8px',
+            padding: '6px 14px',
+            backgroundColor: theme.colors.primary || '#007AFF',
+            color: 'white',
+            border: 'none',
+            borderRadius: theme.radius.default || '4px',
+            cursor: 'pointer',
+            fontSize: theme.typography.scale.body_sm || '12px',
+          }}
+        >
+          Upload
+        </button>
+      )}
+    </div>
+  );
+}
+
+function FilterBuilderRenderer({ component }: { component: Component }) {
+  const theme = useTheme();
+  const cfg = component.filter_config;
+  const [conditions, setConditions] = React.useState<Array<{ field: string; op: string; value: string }>>([]);
+
+  const addCondition = () => {
+    const firstField = cfg?.filterable_fields?.[0] ?? '';
+    setConditions((prev) => [...prev, { field: firstField, op: 'equals', value: '' }]);
+  };
+
+  const removeCondition = (idx: number) => {
+    setConditions((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const updateCondition = (idx: number, key: 'field' | 'op' | 'value', val: string) => {
+    setConditions((prev) => prev.map((c, i) => (i === idx ? { ...c, [key]: val } : c)));
+  };
+
+  const maxReached = cfg?.max_conditions != null && conditions.length >= cfg.max_conditions;
+
+  return (
+    <div
+      style={{
+        padding: theme.spacing.md || '16px',
+        backgroundColor: theme.colors.surface || '#FFFFFF',
+        borderRadius: theme.radius.default || '4px',
+        border: `1px solid ${theme.colors.outline || '#E0E0E0'}`,
+      }}
+    >
+      {component.label && (
+        <p style={{ margin: `0 0 ${theme.spacing.sm || '8px'} 0`, fontWeight: 'bold' }}>
+          {component.label}
+        </p>
+      )}
+
+      {conditions.map((cond, idx) => (
+        <div key={idx} style={{ display: 'flex', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+          <select
+            value={cond.field}
+            onChange={(e) => updateCondition(idx, 'field', e.target.value)}
+            style={{
+              padding: '4px 8px',
+              border: `1px solid ${theme.colors.outline || '#E0E0E0'}`,
+              borderRadius: theme.radius.default || '4px',
+              fontSize: theme.typography.scale.body_sm || '12px',
+            }}
+          >
+            {(cfg?.filterable_fields ?? []).map((f) => (
+              <option key={f} value={f}>{f}</option>
+            ))}
+          </select>
+          <select
+            value={cond.op}
+            onChange={(e) => updateCondition(idx, 'op', e.target.value)}
+            style={{
+              padding: '4px 8px',
+              border: `1px solid ${theme.colors.outline || '#E0E0E0'}`,
+              borderRadius: theme.radius.default || '4px',
+              fontSize: theme.typography.scale.body_sm || '12px',
+            }}
+          >
+            {(cfg?.allowed_operators ?? ['equals', 'unequals']).map((op) => (
+              <option key={op} value={op}>{op}</option>
+            ))}
+          </select>
+          <input
+            value={cond.value}
+            onChange={(e) => updateCondition(idx, 'value', e.target.value)}
+            placeholder="value"
+            style={{
+              flex: 1,
+              padding: '4px 8px',
+              border: `1px solid ${theme.colors.outline || '#E0E0E0'}`,
+              borderRadius: theme.radius.default || '4px',
+              fontSize: theme.typography.scale.body_sm || '12px',
+            }}
+          />
+          <button
+            onClick={() => removeCondition(idx)}
+            style={{
+              padding: '4px 8px',
+              backgroundColor: theme.colors.error || '#BA1A1A',
+              color: 'white',
+              border: 'none',
+              borderRadius: theme.radius.default || '4px',
+              cursor: 'pointer',
+              fontSize: theme.typography.scale.body_sm || '12px',
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      ))}
+
+      <button
+        onClick={addCondition}
+        disabled={maxReached}
+        style={{
+          padding: '6px 14px',
+          backgroundColor: maxReached ? (theme.colors.outline || '#E0E0E0') : (theme.colors.primary || '#007AFF'),
+          color: maxReached ? (theme.colors.on_surface || '#666') : 'white',
+          border: 'none',
+          borderRadius: theme.radius.default || '4px',
+          cursor: maxReached ? 'default' : 'pointer',
+          fontSize: theme.typography.scale.body_sm || '12px',
+        }}
+      >
+        + Add Filter
+      </button>
+    </div>
+  );
+}
+
+function AvatarRenderer({ component }: { component: Component }) {
+  const theme = useTheme();
+  const cfg = component.avatar_config;
+  const size = cfg?.size ?? 'md';
+  const shape = cfg?.shape ?? 'circle';
+
+  const sizePx: Record<string, number> = { xs: 24, sm: 32, md: 40, lg: 56, xl: 72 };
+  const px = sizePx[size] ?? 40;
+  const borderRadius = shape === 'circle' ? '50%' : shape === 'rounded' ? `${px * 0.2}px` : '0';
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <div style={{ position: 'relative', display: 'inline-block' }}>
+        <div
+          style={{
+            width: px,
+            height: px,
+            borderRadius,
+            backgroundColor: theme.colors.primary || '#007AFF',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'white',
+            fontWeight: 'bold',
+            fontSize: px * 0.4,
+            overflow: 'hidden',
+            flexShrink: 0,
+          }}
+        >
+          {/* Fallback initials — real impl reads from data binding */}
+          {cfg?.fallback_style === 'icon' ? '👤' : component.label?.[0]?.toUpperCase() ?? '?'}
+        </div>
+        {cfg?.show_online_indicator && (
+          <span
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              right: 0,
+              width: px * 0.28,
+              height: px * 0.28,
+              borderRadius: '50%',
+              backgroundColor: theme.colors.success || '#1B8A5A',
+              border: `2px solid ${theme.colors.surface || '#FFF'}`,
+            }}
+          />
+        )}
+      </div>
+      {cfg?.show_nick_name && component.label && (
+        <span style={{ fontSize: theme.typography.scale.body_md || '14px', color: theme.colors.on_surface || '#000' }}>
+          {component.label}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function CustomRenderer({ component }: { component: Component }) {
+  const theme = useTheme();
+  // Custom components are registered externally; render a placeholder until resolved.
+  return (
+    <div
+      style={{
+        padding: theme.spacing.md || '16px',
+        border: `2px dashed ${theme.colors.outline || '#E0E0E0'}`,
+        borderRadius: theme.radius.default || '4px',
+        textAlign: 'center',
+        color: theme.colors.on_surface || '#666',
+        fontSize: theme.typography.scale.body_sm || '12px',
+      }}
+    >
+      Custom: <strong>{component.name}</strong>
+      {component.label && <span style={{ marginLeft: '4px' }}>({component.label})</span>}
+    </div>
+  );
+}

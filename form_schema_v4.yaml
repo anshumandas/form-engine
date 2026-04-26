@@ -1866,25 +1866,6 @@ $defs:
   # ── COMPLEX ───────────────────────────────────────────────────────────────
   ComplexField:
     allOf:
-      - $ref: "#/$defs/FieldBase"
-    required: [complex_schema_id, cardinality]
-    unevaluatedProperties: false
-    properties:
-      type:
-        const: complex
-      complex_schema_id:
-        type: string
-        pattern: "^[a-z][a-z0-9_]*$"
-        description: >
-          ID of an external schema fetched from the schema registry.
-      complex_schema_preview:
-        type: boolean
-        default: true
-      cardinality:
-        type: string
-        enum: [single, list, set, map]
-
-    allOf:
       - if:
           properties:
             cardinality:
@@ -2012,6 +1993,23 @@ $defs:
                 const: select
           then:
             required: [map_key_choices]
+      - $ref: "#/$defs/FieldBase"
+    required: [complex_schema_id, cardinality]
+    unevaluatedProperties: false
+    properties:
+      type:
+        const: complex
+      complex_schema_id:
+        type: string
+        pattern: "^[a-z][a-z0-9_]*$"
+        description: >
+          ID of an external schema fetched from the schema registry.
+      complex_schema_preview:
+        type: boolean
+        default: true
+      cardinality:
+        type: string
+        enum: [single, list, set, map]
 
   # ╔══════════════════════════════════════════════════════════════════════════╗
   # ║  COLLECTION                                                              ║

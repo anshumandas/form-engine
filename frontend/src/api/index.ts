@@ -4,7 +4,7 @@ import type {
   FormSubmissionPayload,
   FormSubmissionResponse,
 } from "form-engine/src/libs/types";
-import { getConfig, resolveApiUrl } from "form-engine/src/libs/config";
+import { getConfig, resolveApiUrl } from "@form-engine/libs/config";
 
 // ─── Core fetcher ─────────────────────────────────────────────────────────────
 // Uses relative paths by default (Next.js /api proxy), or an absolute base URL

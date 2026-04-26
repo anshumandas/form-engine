@@ -1,10 +1,15 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# Sample manifest: job_application
-# Upload this file via the Form Builder to see it in action.
-# ─────────────────────────────────────────────────────────────────────────────
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  job_application.yaml — UISystemManifest v1.0.0                             ║
+# ║  Multi-step job application wizard with conditional sections                ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
 
 manifest_id: job_application
-manifest_version: "4.0.0"
+manifest_version: "1.0.0"
+description: >
+  Multi-step job application form demonstrating wizard layout,
+  conditional sections (visa, relocation), file upload, and dynamic choices.
+
+namespaces: [core, schemata, uam, form, ui]
 
 engine:
   mode: reactive
@@ -12,283 +17,348 @@ engine:
   error_mode: collect-all
   debounce_ms: 300
 
-namespaces: [core, schemata, uam, form]
-
 conditions:
   has_experience:
+    description: Show experience details only when years > 0
     expression: "fields.years_experience > 0"
+
   is_remote:
+    description: Remote-only applicant
     condition:
       field: work_preference
       op: eq
       value: remote
+
   needs_visa:
+    description: Show visa sponsorship section for non-local applicants
     condition:
       field: requires_visa
       op: is_true
 
+  is_fresh_graduate:
+    description: Applicant with zero professional experience
+    expression: "fields.years_experience == 0"
+
 forms:
   job_application:
     title: Job Application
-    description: |
-      Apply for an open position at our company. We review all applications within 5 business days.
+    description: >
+      Apply to join our team. Complete all sections — we read every submission
+      and respond within 5 business days.
     version: "1.0.0"
     form_state: active
+    confidentiality: Confidential
+    access:
+      allowed_role_categories: [Customer, Employee, Partner, Contractor]
     layout:
       type: wizard
     submit_label: Submit Application
     draft_label: Save & Continue Later
-
+    state:
+      persistence: localStorage
+      auto_save: true
+      draft_key: job_application_draft
     on_submit:
       type: rest
       url: /api/submissions/
       method: POST
-      success_message: "🎉 Application received! We'll be in touch within 5 days."
+      success_message: "🎉 Application submitted! We'll be in touch within 5 business days."
+      error_message: "Submission failed. Please check your details and try again."
 
     pages:
+      # ── Page 1: Personal Info ───────────────────────────────────────────────
       - id: personal
-        title: Personal Info
+        title: Personal Information
         icon: User
         sections:
-          - id: basic
-            title: Basic Information
+          - id: personal_info
+            title: About You
             fields:
-              - id: full_name
+              - id: first_name
                 type: text
-                label: Full Name
+                label: First Name
                 required: true
                 width: half
-                min_length: 2
-                max_length: 100
-                autocomplete: name
+                autocomplete: given-name
+                max_length: 60
+
+              - id: last_name
+                type: text
+                label: Last Name
+                required: true
+                width: half
+                autocomplete: family-name
+                max_length: 60
 
               - id: email
                 type: text
                 label: Email Address
                 required: true
-                width: half
                 autocomplete: email
-                pattern: "^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$"
-                pattern_message: Please enter a valid email address
+                placeholder: "you@example.com"
+                validation:
+                  pattern: "^[\\w.+-]+@[\\w-]+\\.[a-zA-Z]{2,}$"
+                  pattern_message: "Please enter a valid email address"
 
               - id: phone
                 type: text
-                label: Phone
+                label: Phone Number
+                required: true
                 width: half
                 autocomplete: tel
-                placeholder: "+1 (555) 000-0000"
+                placeholder: "+91 98765 43210"
 
-              - id: location
-                type: text
-                label: Current City / Country
+              - id: dob
+                type: date
+                label: Date of Birth
                 width: half
-                placeholder: "San Francisco, CA"
+                max_date: "today-18y"
 
-              - id: linkedin
-                type: text
-                label: LinkedIn URL
-                placeholder: "https://linkedin.com/in/yourname"
+              - id: nationality
+                type: select
+                label: Nationality
+                required: true
+                width: half
+                choices:
+                  static:
+                    - { value: IN, label: Indian }
+                    - { value: US, label: American }
+                    - { value: GB, label: British }
+                    - { value: AU, label: Australian }
+                    - { value: SG, label: Singaporean }
+                    - { value: OTHER, label: Other }
 
+              - id: requires_visa
+                type: boolean
+                label: I require visa sponsorship to work in this country
+                display_as: checkbox
+                default: false
+
+      # ── Page 2: Experience ─────────────────────────────────────────────────
       - id: experience
-        title: Experience
+        title: Work Experience
         icon: Briefcase
         sections:
-          - id: role
-            title: Role & Experience
+          - id: role_info
+            title: Role Details
             fields:
-              - id: position_applying
-                type: select
-                label: Position Applying For
+              - id: position_applied
+                type: text
+                label: Position Applied For
                 required: true
-                choices:
-                  - value: swe_senior
-                    label: Senior Software Engineer
-                  - value: swe_staff
-                    label: Staff Engineer
-                  - value: pm
-                    label: Product Manager
-                  - value: design_lead
-                    label: Design Lead
-                  - value: data_analyst
-                    label: Data Analyst
+                placeholder: "e.g. Senior Backend Engineer"
 
               - id: years_experience
                 type: number
-                label: Years of Experience
+                label: Years of Professional Experience
                 required: true
+                width: half
                 min: 0
                 max: 50
                 number_type: int
                 display_as: stepper
-                width: half
 
-              - id: current_company
+              - id: current_employer
                 type: text
-                label: Current Company
-                width: half
-                placeholder: "Company name or 'Freelance'"
+                label: Current / Most Recent Employer
                 condition:
-                  field: years_experience
-                  op: gt
-                  value: 0
+                  ref: has_experience
+                width: half
+                placeholder: "Company name"
 
               - id: current_title
                 type: text
-                label: Current Title
-                width: half
-                placeholder: "e.g. Senior Engineer"
+                label: Current / Most Recent Title
                 condition:
-                  field: years_experience
-                  op: gt
-                  value: 0
-
-              - id: notice_period
-                type: select
-                label: Notice Period
+                  ref: has_experience
                 width: half
-                condition:
-                  field: years_experience
-                  op: gt
-                  value: 0
-                choices:
-                  - value: immediate
-                    label: Immediate
-                  - value: 2_weeks
-                    label: 2 Weeks
-                  - value: 1_month
-                    label: 1 Month
-                  - value: 3_months
-                    label: 3 Months
 
-          - id: skills_section
-            title: Skills & Tech
+              - id: current_salary
+                type: number
+                label: Current CTC (INR / yr)
+                condition:
+                  ref: has_experience
+                width: half
+                prefix: "₹"
+                number_type: decimal2
+                min: 0
+                confidentiality: Confidential
+
+          - id: education_section
+            title: Education
+            condition:
+              ref: is_fresh_graduate
             fields:
-              - id: skills
+              - id: institution
+                type: text
+                label: Institution Name
+                required: true
+                width: half
+
+              - id: degree
+                type: text
+                label: Degree / Programme
+                required: true
+                width: half
+
+              - id: graduation_year
+                type: number
+                label: Year of Graduation
+                width: half
+                min: 2000
+                max: 2030
+                number_type: int
+
+      # ── Page 3: Skills & Preferences ──────────────────────────────────────
+      - id: skills_prefs
+        title: Skills & Preferences
+        icon: Star
+        sections:
+          - id: skills_section
+            title: Technical Skills
+            fields:
+              - id: primary_skills
                 type: multiselect
                 label: Primary Skills
+                required: true
                 display_as: tag-input
                 allow_others: true
-                max_selected: 15
                 choices:
-                  - value: python
-                    label: Python
-                  - value: typescript
-                    label: TypeScript
-                  - value: react
-                    label: React / Next.js
-                  - value: go
-                    label: Go
-                  - value: rust
-                    label: Rust
-                  - value: java
-                    label: Java / Kotlin
-                  - value: swift
-                    label: Swift / iOS
-                  - value: android
-                    label: Android / Kotlin
-                  - value: devops
-                    label: DevOps / Platform
-                  - value: ml
-                    label: ML / Data Science
-                  - value: sql
-                    label: SQL / Data Engineering
-                  - value: ux
-                    label: UX Research
-                  - value: design
-                    label: Product Design (Figma)
+                  static:
+                    - { value: python,      label: Python }
+                    - { value: typescript,  label: TypeScript }
+                    - { value: react,       label: React }
+                    - { value: golang,      label: Go }
+                    - { value: java,        label: Java }
+                    - { value: rust,        label: Rust }
+                    - { value: devops,      label: DevOps / SRE }
+                    - { value: ml,          label: Machine Learning }
+                    - { value: ux,          label: UX Design }
+                    - { value: pm,          label: Product Management }
 
               - id: work_preference
                 type: select
                 label: Work Mode Preference
-                display_as: button-group
                 required: true
+                display_as: button-group
                 choices:
-                  - value: office
-                    label: "🏢 In-office"
-                  - value: hybrid
-                    label: "🔀 Hybrid"
-                  - value: remote
-                    label: "🏠 Remote"
+                  static:
+                    - { value: office, label: "🏢 On-site" }
+                    - { value: hybrid, label: "🔀 Hybrid" }
+                    - { value: remote, label: "🏠 Remote" }
 
-              - id: remote_timezone
-                type: text
-                label: Your Timezone
+              - id: expected_salary
+                type: number
+                label: Expected CTC (INR / yr)
                 width: half
-                placeholder: "e.g. UTC+5:30 / IST"
-                condition:
-                  ref: is_remote
+                prefix: "₹"
+                number_type: decimal2
+                min: 0
+                confidentiality: Confidential
 
-              - id: requires_visa
-                type: boolean
-                label: I require visa sponsorship
-                display_as: checkbox
-
-              - id: visa_country
-                type: text
-                label: Which country requires sponsorship?
+              - id: notice_period_days
+                type: number
+                label: Notice Period (Days)
                 width: half
-                condition:
-                  ref: needs_visa
+                min: 0
+                max: 180
+                number_type: int
+                default: 30
 
-      - id: motivation
-        title: Motivation
-        icon: Heart
-        sections:
-          - id: cover
-            title: Cover Letter
+          - id: cover_section
+            title: Cover Note
             fields:
-              - id: why_us
+              - id: cover_letter
                 type: multiline
                 label: Why do you want to join us?
                 required: true
-                rows: 5
-                max_length: 1500
+                rows: 6
+                max_length: 2000
                 placeholder: "Tell us what excites you about this role and our company…"
-
-              - id: biggest_achievement
-                type: multiline
-                label: Describe your biggest professional achievement
-                rows: 4
-                max_length: 1000
-                placeholder: "What impact did you have? What did you learn?"
-
-              - id: salary_expectation
-                type: number
-                label: Expected Annual Salary (USD)
-                prefix: "$"
-                min: 0
-                number_type: decimal2
-                width: half
-                confidentiality: Confidential
-
-              - id: start_date
-                type: date
-                label: Earliest Start Date
-                width: half
-                min_date: today
 
               - id: portfolio_url
                 type: text
-                label: Portfolio / GitHub / Dribbble URL
+                label: Portfolio / GitHub URL
                 placeholder: "https://github.com/yourhandle"
 
-              - id: hear_about_us
+              - id: resume
+                type: file
+                label: Resume / CV
+                required: true
+                accept: ".pdf,.doc,.docx"
+                max_size_mb: 5
+                max_files: 1
+                storage: base64
+
+      # ── Page 4: Visa (conditional) ────────────────────────────────────────
+      - id: visa_page
+        title: Visa Sponsorship
+        icon: Globe
+        condition:
+          ref: needs_visa
+        sections:
+          - id: visa_info
+            title: Visa Requirements
+            fields:
+              - id: current_visa_status
+                type: select
+                label: Current Visa / Work Permit Status
+                required: true
+                choices:
+                  static:
+                    - { value: none,        label: No current work authorisation }
+                    - { value: student,     label: Student visa }
+                    - { value: dependent,   label: Dependent / spouse visa }
+                    - { value: work_permit, label: Work permit (other country) }
+                    - { value: other,       label: Other }
+
+              - id: visa_notes
+                type: multiline
+                label: Additional Visa Details
+                rows: 3
+                max_length: 500
+                placeholder: "Please provide any relevant details about your visa situation…"
+
+      # ── Page 5: Declaration ───────────────────────────────────────────────
+      - id: declaration
+        title: Declaration
+        icon: CheckCircle
+        sections:
+          - id: declaration_section
+            fields:
+              - id: info_accurate
+                type: boolean
+                label: >
+                  I confirm that all information provided in this application
+                  is accurate and complete to the best of my knowledge.
+                required: true
+                display_as: checkbox
+
+              - id: privacy_consent
+                type: boolean
+                label: >
+                  I consent to the storage and processing of my personal data
+                  for the purposes of this recruitment process.
+                required: true
+                display_as: checkbox
+
+              - id: how_heard
                 type: select
                 label: How did you hear about us?
                 choices:
-                  - value: linkedin
-                    label: LinkedIn
-                  - value: referral
-                    label: Employee Referral
-                  - value: job_board
-                    label: Job Board
-                  - value: twitter
-                    label: Twitter / X
-                  - value: other
-                    label: Other
+                  static:
+                    - { value: linkedin,  label: LinkedIn }
+                    - { value: referral,  label: Employee Referral }
+                    - { value: website,   label: Company Website }
+                    - { value: job_board, label: Job Board }
+                    - { value: social,    label: Social Media }
+                    - { value: other,     label: Other }
 
-              - id: consent
-                type: boolean
-                label: I consent to my data being stored and used for recruitment purposes
-                display_as: checkbox
-                required: true
+              - id: referral_name
+                type: text
+                label: Referrer's Name
+                condition:
+                  field: how_heard
+                  op: eq
+                  value: referral
+                placeholder: "Name of the employee who referred you"

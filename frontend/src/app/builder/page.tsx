@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { api } from "@/libs/api";
+import { api } from "@/api";
 import { FormEngine } from "@form-engine/components/FormEngine";
 import { VisualFormBuilder } from "@/components/FormBuilder/VisualFormBuilder";
 import type { FormManifest } from "@form-engine/libs/types";

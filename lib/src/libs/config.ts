@@ -1,8 +1,9 @@
 /**
  * FormEngine Configuration
  *
- * Allows the same lib to be used across multiple frontends pointing at
- * different backends, or operating entirely offline with local manifests.
+ * Library-side config only. Backend connectivity (API base URL, auth tokens,
+ * category/manifest CRUD) lives in the consuming application and is wired in
+ * through the `onSubmit` / `onDraftSave` callbacks — not here.
  *
  * Usage (wrap your app):
  *   <FormEngineProvider config={{ apiBase: "https://my-api.example.com" }}>
@@ -12,6 +13,16 @@
  * Or imperatively (e.g. in non-React entry points):
  *   import { configureFormEngine } from "@form-engine/libs/config";
  *   configureFormEngine({ apiBase: process.env.API_URL });
+ *
+ * OR
+ * 
+ *   <FormEngineProvider config={{ localManifests: { onboarding: manifest } }}>
+ *     <App />
+ *   </FormEngineProvider>
+ *
+ * Or imperatively (e.g. in non-React entry points):
+ *   import { configureFormEngine } from "@form-engine/react";
+ *   configureFormEngine({ localManifests: { onboarding: manifest } });
  */
 
 import { createContext, useContext } from "react";
@@ -44,7 +55,7 @@ export interface FormEngineConfig {
 
   /**
    * Local manifests that bypass HTTP entirely.
-   * When a manifest_id is present here, getManifest() returns it immediately
+   * When a manifest_id is present here, loadManifest() returns it immediately
    * without any network request. Use this to ship forms alongside the
    * frontend bundle — zero backend dependency for those forms.
    *
@@ -68,18 +79,42 @@ export interface FormEngineConfig {
   auth?: FormEngineAuthConfig;
 
   /**
-   * Handler for form submission override.
-   * When provided, this is called instead of the manifest's on_submit config
-   * for every form in the app. Useful for adding auth headers or custom routing.
+   * Global submit handler override.
+   *
+   * When provided, this is called by the FormEngine instead of falling through
+   * to the form's own `on_submit` config. The consuming app is responsible for
+   * sending data to the backend, storing a draft, navigating after success, etc.
+   *
+   * Example:
+   *   onSubmit: async (manifestId, formId, answers) => {
+   *     await myApi.submitForm(manifestId, formId, answers);
+   *   }
    */
   onSubmit?: (
     manifestId: string,
     formId: string,
     answers: FieldAnswers,
   ) => Promise<unknown>;
+
+  /**
+   * Global draft-save handler.
+   *
+   * Called when the user saves a draft. The consuming app decides where drafts
+   * are persisted (localStorage, backend, Tauri FS, etc.).
+   *
+   * Example:
+   *   onDraftSave: async (manifestId, formId, answers) => {
+   *     localStorage.setItem("draft:" + formId, JSON.stringify(answers));
+   *   }
+   */
+  onDraftSave?: (
+    manifestId: string,
+    formId: string,
+    answers: FieldAnswers,
+  ) => Promise<void> | void;
 }
 
-// ─── Module-level singleton (for non-React callers, e.g. api.ts) ──────────────
+// ─── Module-level singleton (for non-React callers) ───────────────────────────
 
 let _config: FormEngineConfig = {};
 
@@ -92,7 +127,7 @@ export function configureFormEngine(config: FormEngineConfig): void {
   _config = { ..._config, ...config };
 }
 
-/** Read the current module-level config. Used by api.ts and hooks. */
+/** Read the current module-level config. Used by hooks and the store. */
 export function getConfig(): Readonly<FormEngineConfig> {
   return _config;
 }

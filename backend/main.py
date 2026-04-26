@@ -10,6 +10,7 @@ from .routers.submissions import router as submissions_router
 from .routers.create_form import router as create_form_router
 from .routers.categories import router as categories_router
 from .routers.ai_chat import router as ai_router
+from .routers.auth import router as auth_router
 from .middleware.security import SecurityHeadersMiddleware, RequestSizeLimitMiddleware
 import datetime
 
@@ -32,6 +33,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
 app.include_router(forms_router)
 app.include_router(submissions_router)
 app.include_router(create_form_router)
@@ -47,9 +49,9 @@ async def health():
 # ── Seed sample manifest on startup ──────────────────────────────────────────
 SAMPLE_MANIFEST = {
     "manifest_id": "hr_forms",
-    "manifest_version": "4.0.0",
+    "manifest_version": "1.0.0",
     "engine": {"mode": "reactive", "evaluation_order": "dependency", "error_mode": "collect-all", "debounce_ms": 300},
-    "namespaces": ["core", "schemata", "uam", "form"],
+    "namespaces": ["core", "schemata", "uam", "form", "ui"],
     "conditions": {
         "is_employed": {"expression": "fields.employment_status == 'employed'"},
         "has_dependents": {"expression": "fields.has_dependents == true"},
@@ -260,10 +262,25 @@ SAMPLE_MANIFEST = {
 }
 
 
+
+
+def _wrap_choices(obj):
+    """Recursively wrap bare choice lists so they conform to ChoiceSource."""
+    if isinstance(obj, dict):
+        for k in list(obj.keys()):
+            if k == 'choices' and isinstance(obj[k], list):
+                obj[k] = {'static': obj[k]}
+            else:
+                _wrap_choices(obj[k])
+    elif isinstance(obj, list):
+        for item in obj:
+            _wrap_choices(item)
+
 @app.on_event("startup")
 async def seed_sample_data():
     now = datetime.datetime.utcnow().isoformat()
     mid = SAMPLE_MANIFEST["manifest_id"]
+    _wrap_choices(SAMPLE_MANIFEST)
     _manifests[mid] = SAMPLE_MANIFEST
     _meta[mid] = {"created_at": now, "updated_at": now}
     print(f"✅ Seeded manifest: {mid}")

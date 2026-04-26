@@ -3,8 +3,8 @@
 import React, { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { api } from "@/libs/api";
-import { categoryApi, type CategorySummary } from "@/libs/api";
+import { api } from "@/api";
+import { categoryApi, type CategorySummary } from "@/api";
 import type { ManifestSummary } from "@form-engine/libs/types";
 import { formatDate, cn } from "@form-engine/libs/utils";
 import { useAuth } from "@/providers/auth-context";

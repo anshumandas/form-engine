@@ -44,8 +44,42 @@ export { FormEngineProvider }              from "./components/FormEngineProvider
 export {
   UIEngineProvider, UIEngineContext,
   ComponentRenderer, LayoutContainer, ScreenLayout, ResponsiveLayout,
+  // Core hooks
   useUIEngine, useCurrentScreen, useNavigation, useTheme,
   useComponentState, useFeatureGate, useAccessControl,
+  // New hooks (ui_system_schema v1.0.0)
+  useResolvedAuth, useAuthFieldFilter,
+  useThemeRegistry, useThemeSwitcher,
+  useToast, useDialog, useTransition,
+  useBreakpoint, useButton, useComponent, useIcon,
+  useConditionEvaluator, useResponsiveValue,
+}                                          from "./components/UIEngine";
+
+// UIEngine Types (ui_system_schema v1.0.0)
+export type {
+  UISystemManifest,
+  UIDesignManifest,
+  ThemeDefinition,
+  Theme,
+  ResolvedAuth,
+  ScreenAuthRules,
+  RolePreferenceOverride,
+  WidgetMap,
+  FormEmbedConfig,
+  FileComponentConfig,
+  FilterBuilderConfig,
+  AvatarConfig,
+  TemplateRegistry,
+  ScreenTemplate,
+  ComponentTemplate,
+  FormTemplate,
+  TemplateVariable,
+  Feature,
+  Screen,
+  Component,
+  Button,
+  NavigationConfig,
+  Route,
 }                                          from "./components/UIEngine";
 
 // ─── Configuration ─────────────────────────────────────────────────────────────

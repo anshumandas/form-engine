@@ -1,408 +1,392 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# form_creator.yaml
-# A meta-form that lets users build new forms using the same Form Engine.
-# Demonstrates: collections, pro-fields (advanced: true), conditional logic,
-#               computed fields, and the full wizard layout.
-#
-# On submission the /api/create-form endpoint transforms the answers into a
-# FormManifest and registers it so it can be rendered immediately.
-# ─────────────────────────────────────────────────────────────────────────────
-
 manifest_id: form_creator
-manifest_version: "4.0.0"
-
+manifest_version: 1.0.0
+namespaces:
+- core
+- schemata
+- uam
+- form
+- ui
 engine:
   mode: reactive
   evaluation_order: dependency
   error_mode: collect-all
   debounce_ms: 250
-
 conditions:
   is_wizard:
     condition:
       field: layout_type
       op: eq
       value: wizard
-
   is_choice_type:
     condition:
       field: field_type
       op: in
-      value: [select, multiselect]
-
+      value:
+      - select
+      - multiselect
   has_rest_submit:
     condition:
       field: submit_type
       op: eq
       value: rest
-
 forms:
   create_form:
-    title: "Form Builder"
-    description: >
-      Design a new form — no code required. Fill out the steps below and your
-      form will be live instantly, rendered by the same engine you are using now.
-    version: "1.0.0"
+    title: Form Builder
+    description: 'Design a new form — no code required. Fill out the steps below and
+      your form will be live instantly, rendered by the same engine you are using
+      now.
+
+      '
+    version: 1.0.0
     form_state: active
     layout:
       type: wizard
-    submit_label: "Create Form"
-    draft_label:  "Save Draft"
-
+    submit_label: Create Form
+    draft_label: Save Draft
     state:
       persistence: localStorage
       auto_save: true
       draft_key: form_creator_draft
-
     on_submit:
       type: rest
       url: /api/create-form
       method: POST
-      success_message: "🎉 Your form is ready! Redirecting you to it now…"
-      error_message: "Could not create the form. Please check your input and try again."
-
+      success_message: 🎉 Your form is ready! Redirecting you to it now…
+      error_message: Could not create the form. Please check your input and try again.
     pages:
+    - id: identity
+      title: Form Identity
+      description: Give your form a name, ID, and layout style.
+      sections:
+      - id: identity_section
+        title: Basic Information
+        fields:
+        - id: form_title
+          type: text
+          label: Form Title
+          required: true
+          placeholder: e.g. Customer Onboarding
+          hint: Shown as the heading on the rendered form.
+          max_length: 120
+        - id: form_id
+          type: text
+          label: Form ID
+          required: true
+          width: half
+          placeholder: e.g. customer_onboarding
+          hint: Lowercase, underscores only. Used in URLs.
+          pattern: ^[a-z][a-z0-9_]*$
+          pattern_message: Only lowercase letters, numbers, and underscores allowed.
+          max_length: 60
+        - id: manifest_id
+          type: select
+          label: Category
+          required: true
+          width: half
+          hint: Groups related forms together. Select an existing category or create
+            one first.
+          display_as: dropdown
+          choices:
+            dynamic:
+              url: /api/categories
+              value_key: category_id
+              label_key: name
+              cache_ttl_seconds: 30
+        - id: form_description
+          type: multiline
+          label: Description
+          rows: 3
+          max_length: 500
+          placeholder: Optional subtitle or instructions shown below the title.
+          advanced: true
+        - id: layout_type
+          type: select
+          label: Layout
+          required: true
+          display_as: button-group
+          choices:
+            static:
+            - value: single-page
+              label: 📄 Single Page
+            - value: wizard
+              label: 🧙 Wizard
+      - id: labels_section
+        title: Button Labels
+        description: Customise the text on the action buttons.
+        fields:
+        - id: submit_label
+          type: text
+          label: Submit Button
+          width: half
+          placeholder: Submit
+          default: Submit
+          advanced: true
+        - id: draft_label
+          type: text
+          label: Draft Button
+          width: half
+          placeholder: Save Draft
+          default: Save Draft
+          advanced: true
+    - id: fields_page
+      title: Form Fields
+      description: 'Add the fields that will appear on your form. Each field has core
+        settings visible by default — click "More options" per item to access advanced
+        configuration such as width, hints, and validation.
 
-      # ── Page 1: Identity ────────────────────────────────────────────────────
-      - id: identity
-        title: "Form Identity"
-        description: "Give your form a name, ID, and layout style."
-        sections:
+        '
+      sections:
+      - id: fields_section
+        title: Fields
+        description: Add at least one field. Reorder with the ▲ ▼ arrows.
+        collection:
+          min_items: 1
+          max_items: 40
+          add_label: + Add Field
+          remove_label: Remove
+          sortable: true
+          default_expanded: true
+          item_title_template: '{{fields.field_label}} ({{fields.field_type}})'
+        fields:
+        - id: field_id
+          type: text
+          label: Field ID
+          required: true
+          width: half
+          placeholder: e.g. first_name
+          pattern: ^[a-z][a-z0-9_]*$
+          pattern_message: Lowercase, underscores only.
+          max_length: 60
+        - id: field_type
+          type: select
+          label: Type
+          required: true
+          width: half
+          display_as: dropdown
+          choices:
+            static:
+            - value: text
+              label: Text
+            - value: multiline
+              label: Long Text
+            - value: number
+              label: Number
+            - value: boolean
+              label: Toggle / Checkbox
+            - value: select
+              label: Single Select
+            - value: multiselect
+              label: Multi Select
+            - value: date
+              label: Date
+            - value: time
+              label: Time
+            - value: datetime
+              label: Date & Time
+            - value: file
+              label: File Upload
+            - value: rating
+              label: Rating
+            - value: richtext
+              label: Rich Text
+            - value: color
+              label: Colour Picker
+            - value: signature
+              label: Signature
+        - id: field_label
+          type: text
+          label: Label
+          required: true
+          placeholder: e.g. First Name
+          max_length: 80
+        - id: field_required
+          type: boolean
+          label: Required
+          display_as: checkbox
+          default: false
+        - id: field_choices
+          type: multiline
+          label: 'Options (one per line, format: value|Label)'
+          rows: 4
+          max_length: 2000
+          placeholder: 'yes|Yes
 
-          - id: identity_section
-            title: "Basic Information"
-            fields:
+            no|No
 
-              - id: form_title
-                type: text
-                label: "Form Title"
-                required: true
-                placeholder: "e.g. Customer Onboarding"
-                hint: "Shown as the heading on the rendered form."
-                max_length: 120
+            maybe|Maybe'
+          hint: 'Each line: value|Display Label. Value is stored, label is shown.'
+        - id: field_width
+          type: select
+          label: Width
+          display_as: button-group
+          default: full
+          advanced: true
+          choices:
+            static:
+            - value: full
+              label: Full
+            - value: half
+              label: Half
+            - value: third
+              label: Third
+        - id: field_placeholder
+          type: text
+          label: Placeholder
+          max_length: 120
+          placeholder: Placeholder text shown when empty
+          advanced: true
+        - id: field_hint
+          type: text
+          label: Hint
+          max_length: 200
+          placeholder: Helper text shown below the field
+          advanced: true
+        - id: field_default
+          type: text
+          label: Default Value
+          max_length: 200
+          placeholder: Pre-filled value
+          advanced: true
+        - id: field_min_length
+          type: number
+          label: Min Length
+          width: half
+          min: 0
+          number_type: int
+          display_as: stepper
+          advanced: true
+        - id: field_max_length
+          type: number
+          label: Max Length
+          width: half
+          min: 1
+          number_type: int
+          display_as: stepper
+          advanced: true
+        - id: field_min
+          type: number
+          label: Min Value
+          width: half
+          decimal_places: 2
+          advanced: true
+        - id: field_max
+          type: number
+          label: Max Value
+          width: half
+          decimal_places: 2
+          advanced: true
+        - id: field_pattern
+          type: text
+          label: Validation Pattern (regex)
+          placeholder: ^[A-Z]{2}[0-9]{6}$
+          advanced: true
+        - id: field_pattern_message
+          type: text
+          label: Pattern Error Message
+          placeholder: Please enter a valid format
+          advanced: true
+    - id: pages_page
+      title: Wizard Pages
+      description: Group your fields into named steps for the wizard layout.
+      condition:
+        ref: is_wizard
+      sections:
+      - id: pages_section
+        title: Pages
+        description: 'Each page becomes a step in the wizard. Enter page IDs and titles,
+          then assign field IDs to each page (comma-separated).
 
-              - id: form_id
-                type: text
-                label: "Form ID"
-                required: true
-                width: half
-                placeholder: "e.g. customer_onboarding"
-                hint: "Lowercase, underscores only. Used in URLs."
-                pattern: "^[a-z][a-z0-9_]*$"
-                pattern_message: "Only lowercase letters, numbers, and underscores allowed."
-                max_length: 60
-
-              - id: manifest_id
-                type: select
-                label: "Category"
-                required: true
-                width: half
-                hint: "Groups related forms together. Select an existing category or create one first."
-                display_as: dropdown
-                choices:
-                  dynamic:
-                    url: /api/categories
-                    value_key: category_id
-                    label_key: name
-                    cache_ttl_seconds: 30
-
-              - id: form_description
-                type: multiline
-                label: "Description"
-                rows: 3
-                max_length: 500
-                placeholder: "Optional subtitle or instructions shown below the title."
-                advanced: true
-
-              - id: layout_type
-                type: select
-                label: "Layout"
-                required: true
-                display_as: button-group
-                choices:
-                  - value: single-page
-                    label: "📄 Single Page"
-                  - value: wizard
-                    label: "🧙 Wizard"
-
-          - id: labels_section
-            title: "Button Labels"
-            description: "Customise the text on the action buttons."
-            fields:
-
-              - id: submit_label
-                type: text
-                label: "Submit Button"
-                width: half
-                placeholder: "Submit"
-                default: "Submit"
-                advanced: true
-
-              - id: draft_label
-                type: text
-                label: "Draft Button"
-                width: half
-                placeholder: "Save Draft"
-                default: "Save Draft"
-                advanced: true
-
-      # ── Page 2: Fields ──────────────────────────────────────────────────────
-      - id: fields_page
-        title: "Form Fields"
-        description: >
-          Add the fields that will appear on your form. Each field has core
-          settings visible by default — click "More options" per item to access
-          advanced configuration such as width, hints, and validation.
-        sections:
-
-          - id: fields_section
-            title: "Fields"
-            description: "Add at least one field. Reorder with the ▲ ▼ arrows."
-            collection:
-              min_items: 1
-              max_items: 40
-              add_label: "+ Add Field"
-              remove_label: "Remove"
-              sortable: true
-              default_expanded: true
-              item_title_template: "{{fields.field_label}} ({{fields.field_type}})"
-            fields:
-
-              # ── Core (always visible) ──────────────────────────────────────
-              - id: field_id
-                type: text
-                label: "Field ID"
-                required: true
-                width: half
-                placeholder: "e.g. first_name"
-                pattern: "^[a-z][a-z0-9_]*$"
-                pattern_message: "Lowercase, underscores only."
-                max_length: 60
-
-              - id: field_type
-                type: select
-                label: "Type"
-                required: true
-                width: half
-                display_as: dropdown
-                choices:
-                  - { value: text,        label: "Text" }
-                  - { value: multiline,   label: "Long Text" }
-                  - { value: number,      label: "Number" }
-                  - { value: boolean,     label: "Toggle / Checkbox" }
-                  - { value: select,      label: "Single Select" }
-                  - { value: multiselect, label: "Multi Select" }
-                  - { value: date,        label: "Date" }
-                  - { value: time,        label: "Time" }
-                  - { value: datetime,    label: "Date & Time" }
-                  - { value: file,        label: "File Upload" }
-                  - { value: rating,      label: "Rating" }
-                  - { value: richtext,    label: "Rich Text" }
-                  - { value: color,       label: "Colour Picker" }
-                  - { value: signature,   label: "Signature" }
-
-              - id: field_label
-                type: text
-                label: "Label"
-                required: true
-                placeholder: "e.g. First Name"
-                max_length: 80
-
-              - id: field_required
-                type: boolean
-                label: "Required"
-                display_as: checkbox
-                default: false
-
-              # ── Options for select / multiselect ──────────────────────────
-              - id: field_choices
-                type: multiline
-                label: "Options (one per line, format: value|Label)"
-                rows: 4
-                max_length: 2000
-                placeholder: "yes|Yes\nno|No\nmaybe|Maybe"
-                hint: "Each line: value|Display Label. Value is stored, label is shown."
-
-              # ── Pro fields (hidden behind More options) ────────────────────
-              - id: field_width
-                type: select
-                label: "Width"
-                display_as: button-group
-                default: full
-                advanced: true
-                choices:
-                  - { value: full,  label: "Full" }
-                  - { value: half,  label: "Half" }
-                  - { value: third, label: "Third" }
-
-              - id: field_placeholder
-                type: text
-                label: "Placeholder"
-                max_length: 120
-                placeholder: "Placeholder text shown when empty"
-                advanced: true
-
-              - id: field_hint
-                type: text
-                label: "Hint"
-                max_length: 200
-                placeholder: "Helper text shown below the field"
-                advanced: true
-
-              - id: field_default
-                type: text
-                label: "Default Value"
-                max_length: 200
-                placeholder: "Pre-filled value"
-                advanced: true
-
-              - id: field_min_length
-                type: number
-                label: "Min Length"
-                width: half
-                min: 0
-                number_type: int
-                display_as: stepper
-                advanced: true
-
-              - id: field_max_length
-                type: number
-                label: "Max Length"
-                width: half
-                min: 1
-                number_type: int
-                display_as: stepper
-                advanced: true
-
-              - id: field_min
-                type: number
-                label: "Min Value"
-                width: half
-                decimal_places: 2
-                advanced: true
-
-              - id: field_max
-                type: number
-                label: "Max Value"
-                width: half
-                decimal_places: 2
-                advanced: true
-
-              - id: field_pattern
-                type: text
-                label: "Validation Pattern (regex)"
-                placeholder: "^[A-Z]{2}[0-9]{6}$"
-                advanced: true
-
-              - id: field_pattern_message
-                type: text
-                label: "Pattern Error Message"
-                placeholder: "Please enter a valid format"
-                advanced: true
-
-      # ── Page 3: Pages (wizard only) ─────────────────────────────────────────
-      - id: pages_page
-        title: "Wizard Pages"
-        description: "Group your fields into named steps for the wizard layout."
-        condition:
-          ref: is_wizard
-        sections:
-
-          - id: pages_section
-            title: "Pages"
-            description: >
-              Each page becomes a step in the wizard. Enter page IDs and titles, then
-              assign field IDs to each page (comma-separated).
-            collection:
-              min_items: 1
-              max_items: 10
-              add_label: "+ Add Page"
-              remove_label: "Remove"
-              default_expanded: true
-              item_title_template: "{{fields.page_title}}"
-            fields:
-
-              - id: page_id
-                type: text
-                label: "Page ID"
-                required: true
-                width: half
-                placeholder: "e.g. personal_info"
-                pattern: "^[a-z][a-z0-9_]*$"
-                pattern_message: "Lowercase, underscores only."
-
-              - id: page_title
-                type: text
-                label: "Page Title"
-                required: true
-                width: half
-                placeholder: "e.g. Personal Information"
-
-              - id: page_fields
-                type: text
-                label: "Field IDs on this page"
-                required: true
-                placeholder: "first_name, last_name, email"
-                hint: "Comma-separated list of field IDs you defined on the previous step."
-
-              - id: page_description
-                type: text
-                label: "Description"
-                placeholder: "Optional description shown under the page title."
-                advanced: true
-
-              - id: page_icon
-                type: select
-                label: "Step Icon"
-                display_as: dropdown
-                advanced: true
-                choices:
-                  - { value: "",         label: "None" }
-                  - { value: User,       label: "👤 User" }
-                  - { value: Briefcase,  label: "💼 Briefcase" }
-                  - { value: Heart,      label: "❤ Heart" }
-                  - { value: Lock,       label: "🔒 Lock" }
-                  - { value: Settings,   label: "⚙ Settings" }
-                  - { value: Star,       label: "⭐ Star" }
-                  - { value: Mail,       label: "✉ Mail" }
-
-      # ── Page 4: Submission ──────────────────────────────────────────────────
-      - id: submission_page
-        title: "Submission"
-        description: "Configure what happens when the user submits the form."
-        sections:
-
-          - id: submit_section
-            title: "Submit Action"
-            fields:
-
-              - id: submit_type
-                type: select
-                label: "On Submit"
-                required: true
-                display_as: radio
-                choices:
-                  - { value: none, label: "Show success message only" }
-                  - { value: rest, label: "POST to a REST endpoint" }
-
-              - id: submit_url
-                type: text
-                label: "Endpoint URL"
-                required: true
-                placeholder: "https://api.example.com/submissions"
-                hint: "The form data will be sent as a JSON POST body."
-                condition:
-                  ref: has_rest_submit
-
-              - id: success_message
-                type: text
-                label: "Success Message"
-                default: "Form submitted successfully!"
-                max_length: 300
-
-              - id: error_message
-                type: text
-                label: "Error Message"
-                default: "Submission failed. Please try again."
-                max_length: 300
-                advanced: true
+          '
+        collection:
+          min_items: 1
+          max_items: 10
+          add_label: + Add Page
+          remove_label: Remove
+          default_expanded: true
+          item_title_template: '{{fields.page_title}}'
+        fields:
+        - id: page_id
+          type: text
+          label: Page ID
+          required: true
+          width: half
+          placeholder: e.g. personal_info
+          pattern: ^[a-z][a-z0-9_]*$
+          pattern_message: Lowercase, underscores only.
+        - id: page_title
+          type: text
+          label: Page Title
+          required: true
+          width: half
+          placeholder: e.g. Personal Information
+        - id: page_fields
+          type: text
+          label: Field IDs on this page
+          required: true
+          placeholder: first_name, last_name, email
+          hint: Comma-separated list of field IDs you defined on the previous step.
+        - id: page_description
+          type: text
+          label: Description
+          placeholder: Optional description shown under the page title.
+          advanced: true
+        - id: page_icon
+          type: select
+          label: Step Icon
+          display_as: dropdown
+          advanced: true
+          choices:
+            static:
+            - value: ''
+              label: None
+            - value: User
+              label: 👤 User
+            - value: Briefcase
+              label: 💼 Briefcase
+            - value: Heart
+              label: ❤ Heart
+            - value: Lock
+              label: 🔒 Lock
+            - value: Settings
+              label: ⚙ Settings
+            - value: Star
+              label: ⭐ Star
+            - value: Mail
+              label: ✉ Mail
+    - id: submission_page
+      title: Submission
+      description: Configure what happens when the user submits the form.
+      sections:
+      - id: submit_section
+        title: Submit Action
+        fields:
+        - id: submit_type
+          type: select
+          label: On Submit
+          required: true
+          display_as: radio
+          choices:
+            static:
+            - value: none
+              label: Show success message only
+            - value: rest
+              label: POST to a REST endpoint
+        - id: submit_url
+          type: text
+          label: Endpoint URL
+          required: true
+          placeholder: https://api.example.com/submissions
+          hint: The form data will be sent as a JSON POST body.
+          condition:
+            ref: has_rest_submit
+        - id: success_message
+          type: text
+          label: Success Message
+          default: Form submitted successfully!
+          max_length: 300
+        - id: error_message
+          type: text
+          label: Error Message
+          default: Submission failed. Please try again.
+          max_length: 300
+          advanced: true

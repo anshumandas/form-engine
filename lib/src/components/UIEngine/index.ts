@@ -21,11 +21,15 @@ export {
   useComponentState,
   useFeatureGate,
   useAccessControl,
+  useResolvedAuth,
+  useAuthFieldFilter,
   useConditionEvaluator,
   useResponsiveValue,
   useTransition,
   useToast,
   useDialog,
+  useThemeRegistry,
+  useThemeSwitcher,
 } from './context';
 
 export {
