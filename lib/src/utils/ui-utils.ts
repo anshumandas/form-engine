@@ -34,7 +34,7 @@ export function validateManifest(manifest: UIDesignManifest): ValidationError[] 
     });
   }
 
-  if (!manifest.theme) {
+  if (!manifest.themes) {
     errors.push({
       path: 'theme',
       message: 'theme configuration is required',
@@ -50,7 +50,7 @@ export function validateManifest(manifest: UIDesignManifest): ValidationError[] 
     });
   }
 
-  if (!manifest.navigation.initial_screen) {
+  if (!manifest.navigation?.initial_screen) {
     errors.push({
       path: 'navigation.initial_screen',
       message: 'initial_screen must be specified',
@@ -59,7 +59,7 @@ export function validateManifest(manifest: UIDesignManifest): ValidationError[] 
   }
 
   // Check initial screen exists
-  if (manifest.navigation.initial_screen && !manifest.screens?.[manifest.navigation.initial_screen]) {
+  if (manifest.navigation?.initial_screen && !manifest.screens?.[manifest.navigation.initial_screen]) {
     errors.push({
       path: 'navigation.initial_screen',
       message: `Screen "${manifest.navigation.initial_screen}" referenced but not defined`,
@@ -96,7 +96,7 @@ export function validateManifest(manifest: UIDesignManifest): ValidationError[] 
 
   // Validate screen component references
   Object.entries(manifest.screens || {}).forEach(([screenKey, screen]) => {
-    screen.components.forEach((placement, idx) => {
+    screen.components?.forEach((placement, idx) => {
       if (!manifest.components?.[placement.component_ref]) {
         errors.push({
           path: `screens.${screenKey}.components[${idx}]`,
@@ -327,14 +327,14 @@ export async function loadManifestFromYAML(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function getHomeScreens(manifest: UIDesignManifest) {
-  return Object.entries(manifest.screens)
+  return Object.entries(manifest.screens || {})
     .filter(([, screen]) => screen.is_home)
     .sort((a, b) => (a[1].nav_order || 0) - (b[1].nav_order || 0))
     .map(([key]) => key);
 }
 
 export function resolveRoute(manifest: UIDesignManifest, path: string) {
-  const routes = manifest.navigation.routes || {};
+  const routes = manifest.navigation?.routes || {};
 
   for (const [routeName, route] of Object.entries(routes)) {
     if (route.path === path) {

@@ -1,0 +1,727 @@
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  ui_builder.yaml  —  v1.0.0                                                  ║
+# ║                                                                              ║
+# ║  UISystemManifest that describes the UIBuilder application itself.           ║
+# ║                                                                              ║
+# ║  HOW IT WORKS                                                                ║
+# ║  UIBuilder wraps itself in <UIEngineProvider manifest={uiBuilderManifest}>   ║
+# ║  and calls <ScreenLayout screenKey="builder_main" /> to render its own UI.   ║
+# ║  Every editor panel is a Form-type component; the FormEngine renders the     ║
+# ║  fields defined in forms/ui_builder_forms.ts.                                ║
+# ║                                                                              ║
+# ║  SCREEN LAYOUT                                                               ║
+# ║    Left (3/5)  — builder_tab_bar   (Top)    tab navigation                  ║
+# ║                  builder_panels    (Center) active editor panel              ║
+# ║    Right (2/5) — yaml_preview      (Right)  live YAML output                ║
+# ║                                                                              ║
+# ║  PANELS (each is a Form-type component backed by FormEngine)                ║
+# ║    panel_overview    → form_ref: overview                                   ║
+# ║    panel_screens     → form_ref: screen_editor / add_screen                 ║
+# ║    panel_components  → form_ref: component_editor / add_component           ║
+# ║    panel_navigation  → form_ref: navigation_editor / route_editor           ║
+# ║    panel_themes      → form_ref: theme_editor / add_theme                   ║
+# ║    panel_assets      → form_ref: button_editor / dialog_editor / …          ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+manifest_id: ui_builder
+manifest_version: "1.0.0"
+description: >
+  Self-describing manifest for the UIBuilder application.
+  UIEngine reads this file to render the builder's own screens and components.
+  FormEngine is embedded inside each Form-type component to render editor forms.
+namespaces: [core, schemata, uam, form, ui]
+active_theme: builder_dark
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ENGINE
+# ─────────────────────────────────────────────────────────────────────────────
+engine:
+  mode: reactive
+  evaluation_order: dependency
+  error_mode: collect-all
+  debounce_ms: 200
+
+# ─────────────────────────────────────────────────────────────────────────────
+# THEMES
+# ─────────────────────────────────────────────────────────────────────────────
+themes:
+  builder_dark:
+    label: Builder Dark
+    extends: default
+    selectable: false          # internal theme — not shown in end-user picker
+    preview_color: "1E293B"
+    colors:
+      primary:         "#3B82F6"   # blue-500
+      primary_light:   "#60A5FA"   # blue-400
+      primary_dark:    "#1D4ED8"   # blue-700
+      surface:         "#0F172A"   # slate-900
+      surface_variant: "#1E293B"   # slate-800
+      on_surface:      "#F1F5F9"   # slate-100
+      outline:         "#334155"   # slate-700
+      error:           "#EF4444"   # red-500
+      on_error:        "#FFFFFF"
+      success:         "#22C55E"   # green-500
+      warning:         "#F59E0B"   # amber-500
+      # builder-specific tokens
+      panel_bg:        "#111827"   # gray-900
+      tab_active_bg:   "#2563EB"   # blue-600
+      tab_active_fg:   "#FFFFFF"
+      tab_inactive_fg: "#94A3B8"   # slate-400
+      yaml_bg:         "#030712"   # gray-950
+      yaml_fg:         "#86EFAC"   # green-300
+      sidebar_bg:      "#1E293B"   # slate-800
+      sidebar_border:  "#334155"   # slate-700
+      accent_form:     "#7C3AED"   # violet-600
+      accent_form_bg:  "#1E1B4B"   # indigo-950
+    typography:
+      font_family_default: "Inter, system-ui, sans-serif"
+      font_family_mono:    "JetBrains Mono, Fira Code, monospace"
+      scale:
+        xs:   "0.6875rem"   # 11px
+        sm:   "0.75rem"     # 12px
+        base: "0.875rem"    # 14px
+        lg:   "1rem"        # 16px
+        xl:   "1.125rem"    # 18px
+        "2xl": "1.5rem"     # 24px
+    spacing:
+      xs:  "0.25rem"
+      sm:  "0.5rem"
+      md:  "1rem"
+      lg:  "1.25rem"
+      xl:  "1.5rem"
+      "2xl": "2rem"
+    radius:
+      sm:      "0.5rem"
+      default: "0.75rem"
+      lg:      "1rem"
+      xl:      "1.5rem"
+      full:    "9999px"
+    elevation:
+      default: "0 1px 3px rgba(0,0,0,.4)"
+      raised:  "0 4px 12px rgba(0,0,0,.5)"
+      overlay: "0 8px 24px rgba(0,0,0,.6)"
+    motion:
+      duration_fast_ms:     100
+      duration_standard_ms: 200
+      duration_slow_ms:     350
+      easing_standard:      "cubic-bezier(0.4, 0, 0.2, 1)"
+      reduced_motion:       false
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ICONS
+# ─────────────────────────────────────────────────────────────────────────────
+icons:
+  icon_overview:    { type: lucide, name: FileText,   alt: Overview    }
+  icon_screens:     { type: lucide, name: Monitor,    alt: Screens     }
+  icon_components:  { type: lucide, name: Puzzle,     alt: Components  }
+  icon_navigation:  { type: lucide, name: Compass,    alt: Navigation  }
+  icon_themes:      { type: lucide, name: Palette,    alt: Themes      }
+  icon_assets:      { type: lucide, name: Package,    alt: Assets      }
+  icon_copy:        { type: lucide, name: Copy,       alt: Copy YAML   }
+  icon_add:         { type: lucide, name: Plus,       alt: Add         }
+  icon_delete:      { type: lucide, name: Trash2,     alt: Delete      }
+  icon_chevron:     { type: lucide, name: ChevronRight, alt: Expand    }
+  icon_check:       { type: lucide, name: Check,      alt: Saved       }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BREAKPOINTS
+# ─────────────────────────────────────────────────────────────────────────────
+breakpoints:
+  mobile:
+    min_width_px: 0
+    max_width_px: 767
+    label: Mobile
+    columns: 4
+  tablet:
+    min_width_px: 768
+    max_width_px: 1279
+    label: Tablet
+    columns: 8
+  desktop:
+    min_width_px: 1280
+    max_width_px: null
+    label: Desktop
+    columns: 12
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TOASTS
+# ─────────────────────────────────────────────────────────────────────────────
+toasts:
+  toast_saved:
+    message: Changes saved.
+    severity: success
+    duration_ms: 2000
+    position: bottom_right
+  toast_copied:
+    message: YAML copied to clipboard.
+    severity: info
+    duration_ms: 1500
+    position: bottom_right
+  toast_error:
+    message: Something went wrong. Please try again.
+    severity: error
+    duration_ms: 4000
+    position: bottom_right
+  toast_form_creator_fail:
+    message: Could not load form creator — is the backend running?
+    severity: warning
+    duration_ms: 5000
+    position: bottom_right
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ACTIONS
+# ─────────────────────────────────────────────────────────────────────────────
+actions:
+  copy_yaml:
+    type: custom
+    description: Copies the live YAML output to the clipboard.
+    handler: onCopyYaml
+  show_saved_toast:
+    type: show_toast
+    toast_ref: toast_saved
+  show_copied_toast:
+    type: show_toast
+    toast_ref: toast_copied
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BUTTONS (reusable)
+# ─────────────────────────────────────────────────────────────────────────────
+buttons:
+  btn_copy_yaml:
+    name: btn_copy_yaml
+    label: Copy
+    button_type: Flat
+    on_press: onCopyYaml
+    icon_ref: icon_copy
+  btn_add_screen:
+    name: btn_add_screen
+    label: + Add Screen
+    button_type: Flat
+    on_press: onAddScreen
+    icon_ref: icon_add
+  btn_add_component:
+    name: btn_add_component
+    label: + Add Component
+    button_type: Flat
+    on_press: onAddComponent
+    icon_ref: icon_add
+  btn_add_theme:
+    name: btn_add_theme
+    label: + Add Theme
+    button_type: Flat
+    on_press: onAddTheme
+    icon_ref: icon_add
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FORMS
+# Forms are defined here as schema-level stubs.
+# buildUIBuilderManifest() in ui_builder_forms.ts returns the authoritative
+# runtime FormManifest with fully-typed fields, choices, and validations.
+# The UIEngine passes that FormManifest to FormEngine when it encounters a
+# Form-type component; this section describes them for documentation purposes.
+# ─────────────────────────────────────────────────────────────────────────────
+forms:
+  overview:
+    title: Manifest Overview
+    version: "1.0.0"
+    layout: { type: single-page, columns: 12 }
+    sections:
+      - id: identity
+        title: Identity
+        fields:
+          - { id: manifest_id,      type: text,        label: Manifest ID,  required: true }
+          - { id: manifest_version, type: text,        label: Version,      width: third   }
+          - { id: description,      type: multiline,   label: Description               }
+      - id: engine
+        title: Engine Configuration
+        fields:
+          - { id: engine_mode,        type: select, label: Engine Mode    }
+          - { id: engine_error_mode,  type: select, label: Error Mode     }
+          - { id: engine_debounce_ms, type: number, label: Debounce (ms), width: third }
+      - id: theme_ns
+        title: Theme & Namespaces
+        fields:
+          - { id: active_theme, type: select,      label: Active Theme }
+          - { id: namespaces,   type: multiselect, label: Namespaces   }
+
+  add_screen:
+    title: Add Screen
+    version: "1.0.0"
+    layout: { type: single-page }
+    sections:
+      - id: basic
+        fields:
+          - { id: key,          type: text,    label: Key,              required: true }
+          - { id: label,        type: text,    label: Label                           }
+          - { id: is_home,      type: boolean, label: Is Home Screen?                 }
+          - { id: require_auth, type: boolean, label: Require Auth?,    default: true }
+
+  screen_editor:
+    title: Screen Settings
+    version: "1.0.0"
+    layout: { type: single-page, columns: 12 }
+    sections:
+      - id: display
+        title: Display
+        fields:
+          - { id: label,            type: text,    label: Label                       }
+          - { id: nav_order,        type: number,  label: Nav Order,   width: third   }
+          - { id: theme_ref,        type: select,  label: Theme Override               }
+          - { id: background_color, type: color,   label: Background Colour           }
+      - id: access
+        title: Access Control
+        fields:
+          - { id: is_home,            type: boolean, label: Set as Home Screen?        }
+          - { id: require_auth,       type: boolean, label: Require Authentication?    }
+          - { id: redirect_on_denied, type: select,  label: Redirect if Denied         }
+
+  add_component:
+    title: Add Component
+    version: "1.0.0"
+    layout: { type: single-page }
+    sections:
+      - id: basic
+        fields:
+          - { id: key,   type: text,   label: Key,            required: true }
+          - { id: label, type: text,   label: Label                          }
+          - { id: type,  type: select, label: Component Type                 }
+
+  component_editor:
+    title: Component Settings
+    version: "1.0.0"
+    layout: { type: single-page, columns: 12 }
+    sections:
+      - id: basic
+        title: Basic
+        fields:
+          - { id: label, type: text,   label: Label  }
+          - { id: type,  type: select, label: Type   }
+      - id: data
+        title: Data & Content
+        fields:
+          - { id: schema_ref, type: text, label: Schema Ref   }
+          - { id: text,       type: text, label: Static Text  }
+      - id: access
+        title: Access & Theming
+        fields:
+          - { id: feature_ref, type: text,   label: Feature Gate    }
+          - { id: theme_ref,   type: select, label: Theme Override   }
+
+  form_config_editor:
+    title: Form Binding
+    version: "1.0.0"
+    layout: { type: single-page }
+    sections:
+      - id: binding
+        title: Form Reference
+        fields:
+          - { id: form_ref,   type: select, label: Form       }
+          - { id: embed_mode, type: select, label: Embed Mode }
+
+  navigation_editor:
+    title: Navigation
+    version: "1.0.0"
+    layout: { type: single-page }
+    sections:
+      - id: global
+        fields:
+          - { id: nav_type,         type: select, label: Navigation Type  }
+          - { id: initial_screen,   type: select, label: Initial Screen   }
+          - { id: tab_bar_position, type: select, label: Tab Bar Position }
+
+  route_editor:
+    title: Add Route
+    version: "1.0.0"
+    layout: { type: single-page }
+    sections:
+      - id: route
+        fields:
+          - { id: route_key,     type: text,    label: Route Key       }
+          - { id: screen,        type: select,  label: Screen          }
+          - { id: path,          type: text,    label: URL Path        }
+          - { id: auth_required, type: boolean, label: Require Auth?   }
+
+  add_theme:
+    title: Add Theme
+    version: "1.0.0"
+    layout: { type: single-page }
+    sections:
+      - id: basic
+        fields:
+          - { id: key,     type: text,   label: Key          }
+          - { id: label,   type: text,   label: Label        }
+          - { id: extends, type: select, label: Base Theme   }
+
+  theme_editor:
+    title: Theme Editor
+    version: "1.0.0"
+    layout: { type: single-page, columns: 12 }
+    sections:
+      - id: meta
+        title: Metadata
+        fields:
+          - { id: label,         type: text,    label: Display Name     }
+          - { id: extends,       type: select,  label: Extends          }
+          - { id: selectable,    type: boolean, label: Show in picker?  }
+          - { id: preview_color, type: color,   label: Preview Colour   }
+      - id: colours
+        title: Colour Tokens
+        fields:
+          - { id: color_primary,       type: color, label: Primary,        width: half }
+          - { id: color_primary_light, type: color, label: Primary Light,   width: half }
+          - { id: color_primary_dark,  type: color, label: Primary Dark,    width: half }
+          - { id: color_surface,       type: color, label: Surface,         width: half }
+          - { id: color_on_surface,    type: color, label: On Surface,      width: half }
+          - { id: color_outline,       type: color, label: Outline,         width: half }
+          - { id: color_error,         type: color, label: Error,           width: half }
+          - { id: color_success,       type: color, label: Success,         width: half }
+          - { id: color_warning,       type: color, label: Warning,         width: half }
+
+  button_editor:
+    title: Add Button
+    version: "1.0.0"
+    layout: { type: single-page }
+    sections:
+      - id: button
+        fields:
+          - { id: key,      type: text, label: Key,      required: true }
+          - { id: label,    type: text, label: Label                    }
+          - { id: on_press, type: text, label: on_press, required: true }
+
+  dialog_editor:
+    title: Add Dialog
+    version: "1.0.0"
+    layout: { type: single-page }
+    sections:
+      - id: dialog
+        fields:
+          - { id: key,   type: text,      label: Key,   required: true }
+          - { id: title, type: text,      label: Title, required: true }
+          - { id: body,  type: multiline, label: Body                  }
+
+  toast_editor:
+    title: Add Toast
+    version: "1.0.0"
+    layout: { type: single-page }
+    sections:
+      - id: toast
+        fields:
+          - { id: key,      type: text,   label: Key,      required: true }
+          - { id: message,  type: text,   label: Message,  required: true }
+          - { id: severity, type: select, label: Severity                 }
+
+  icon_editor:
+    title: Add Icon
+    version: "1.0.0"
+    layout: { type: single-page }
+    sections:
+      - id: icon
+        fields:
+          - { id: key,  type: text,   label: Key,       required: true }
+          - { id: type, type: select, label: Icon Type                 }
+          - { id: name, type: text,   label: Name / Path               }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COMPONENTS
+# Each editor panel is a Form-type component backed by FormEngine.
+# Sub-components that are not Form-type (tab bar, YAML preview) are Custom.
+# ─────────────────────────────────────────────────────────────────────────────
+components:
+
+  # ── Tab navigation bar ─────────────────────────────────────────────────────
+  builder_tab_bar:
+    name: builder_tab_bar
+    label: Builder Tabs
+    type: HorizontalList
+    actions:
+      - name: tab_overview
+        label: "🗒 Overview"
+        on_press: onTabOverview
+      - name: tab_screens
+        label: "📱 Screens"
+        on_press: onTabScreens
+      - name: tab_components
+        label: "🧩 Components"
+        on_press: onTabComponents
+      - name: tab_navigation
+        label: "🧭 Navigation"
+        on_press: onTabNavigation
+      - name: tab_themes
+        label: "🎨 Themes"
+        on_press: onTabThemes
+      - name: tab_assets
+        label: "📦 Assets"
+        on_press: onTabAssets
+    accessibility:
+      role: tabpanel
+      label: Builder Navigation
+    analytics_id: builder_tab_bar
+
+  # ── Editor panels (Form-type — FormEngine renders the fields) ───────────────
+  panel_overview:
+    name: panel_overview
+    label: Overview Panel
+    type: Form
+    form_ref: overview
+    form_embed:
+      mode: inline
+      on_submit_action_ref: show_saved_toast
+
+  panel_screens:
+    name: panel_screens
+    label: Screens Panel
+    type: Form
+    form_ref: screen_editor
+    form_embed:
+      mode: inline
+      on_submit_action_ref: show_saved_toast
+    # The screens panel renders a list sidebar + detail form.
+    # The sidebar uses a VerticalList sub-component for item selection.
+    sub_components:
+      - component_ref: screen_list_sidebar
+        direction: Left
+      - component_ref: panel_add_screen
+        direction: Bottom
+
+  screen_list_sidebar:
+    name: screen_list_sidebar
+    label: Screen List
+    type: VerticalList
+    ui_persistence: InApp
+    empty_state:
+      text: No screens yet — add one below.
+      icon_ref: icon_screens
+
+  panel_add_screen:
+    name: panel_add_screen
+    label: Add Screen Form
+    type: Form
+    form_ref: add_screen
+    form_embed:
+      mode: inline
+      on_submit_action_ref: show_saved_toast
+
+  panel_components:
+    name: panel_components
+    label: Components Panel
+    type: Form
+    form_ref: component_editor
+    form_embed:
+      mode: inline
+      on_submit_action_ref: show_saved_toast
+    sub_components:
+      - component_ref: component_list_sidebar
+        direction: Left
+      - component_ref: panel_add_component
+        direction: Bottom
+      - component_ref: panel_form_config
+        direction: Bottom
+
+  component_list_sidebar:
+    name: component_list_sidebar
+    label: Component List
+    type: VerticalList
+    ui_persistence: InApp
+    empty_state:
+      text: No components yet — add one below.
+      icon_ref: icon_components
+
+  panel_add_component:
+    name: panel_add_component
+    label: Add Component Form
+    type: Form
+    form_ref: add_component
+    form_embed:
+      mode: inline
+      on_submit_action_ref: show_saved_toast
+
+  panel_form_config:
+    name: panel_form_config
+    label: Form Binding (type=Form only)
+    type: Form
+    form_ref: form_config_editor
+    form_embed:
+      mode: inline
+      on_submit_action_ref: show_saved_toast
+
+  panel_navigation:
+    name: panel_navigation
+    label: Navigation Panel
+    type: Form
+    form_ref: navigation_editor
+    form_embed:
+      mode: inline
+      on_submit_action_ref: show_saved_toast
+    sub_components:
+      - component_ref: route_list
+        direction: Bottom
+      - component_ref: panel_add_route
+        direction: Bottom
+
+  route_list:
+    name: route_list
+    label: Route List
+    type: VerticalList
+    ui_persistence: InApp
+    empty_state:
+      text: No routes defined yet.
+      icon_ref: icon_navigation
+
+  panel_add_route:
+    name: panel_add_route
+    label: Add Route Form
+    type: Form
+    form_ref: route_editor
+    form_embed:
+      mode: inline
+      on_submit_action_ref: show_saved_toast
+
+  panel_themes:
+    name: panel_themes
+    label: Themes Panel
+    type: Form
+    form_ref: theme_editor
+    form_embed:
+      mode: inline
+      on_submit_action_ref: show_saved_toast
+    sub_components:
+      - component_ref: theme_list_sidebar
+        direction: Left
+      - component_ref: panel_add_theme
+        direction: Bottom
+
+  theme_list_sidebar:
+    name: theme_list_sidebar
+    label: Theme List
+    type: VerticalList
+    ui_persistence: InApp
+    empty_state:
+      text: No custom themes — add one below.
+      icon_ref: icon_themes
+
+  panel_add_theme:
+    name: panel_add_theme
+    label: Add Theme Form
+    type: Form
+    form_ref: add_theme
+    form_embed:
+      mode: inline
+      on_submit_action_ref: show_saved_toast
+
+  panel_assets:
+    name: panel_assets
+    label: Assets Panel
+    type: Custom
+    # Assets panel is a tabbed view of four Form sub-components (button / dialog / toast / icon).
+    sub_components:
+      - component_ref: panel_button_editor
+        direction: Center
+      - component_ref: panel_dialog_editor
+        direction: Center
+      - component_ref: panel_toast_editor
+        direction: Center
+      - component_ref: panel_icon_editor
+        direction: Center
+
+  panel_button_editor:
+    name: panel_button_editor
+    label: Button Asset Editor
+    type: Form
+    form_ref: button_editor
+    form_embed:
+      mode: inline
+      on_submit_action_ref: show_saved_toast
+
+  panel_dialog_editor:
+    name: panel_dialog_editor
+    label: Dialog Asset Editor
+    type: Form
+    form_ref: dialog_editor
+    form_embed:
+      mode: inline
+      on_submit_action_ref: show_saved_toast
+
+  panel_toast_editor:
+    name: panel_toast_editor
+    label: Toast Asset Editor
+    type: Form
+    form_ref: toast_editor
+    form_embed:
+      mode: inline
+      on_submit_action_ref: show_saved_toast
+
+  panel_icon_editor:
+    name: panel_icon_editor
+    label: Icon Asset Editor
+    type: Form
+    form_ref: icon_editor
+    form_embed:
+      mode: inline
+      on_submit_action_ref: show_saved_toast
+
+  # ── YAML output preview (right panel) ──────────────────────────────────────
+  yaml_preview:
+    name: yaml_preview
+    label: YAML Output
+    type: Custom
+    # The Custom renderer for "yaml-output" shows the live YAML with
+    # a Copy button wired to onCopyYaml. Text is injected at runtime
+    # via the engine's component state.
+    text: yaml-output
+    actions:
+      - name: btn_copy_yaml
+        label: Copy
+        on_press: onCopyYaml
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SCREENS
+# ─────────────────────────────────────────────────────────────────────────────
+screens:
+  builder_main:
+    name: builder_main
+    label: UI Builder
+    is_home: true
+    nav_order: 0
+    theme_ref: builder_dark
+    auth_rules:
+      require_auth: false       # builder is accessible without login by default
+    components:
+      # Tab bar docked to top of the left column
+      - component_ref: builder_tab_bar
+        direction: Top
+      # Active editor panel fills the center
+      - component_ref: panel_overview
+        direction: Center
+      # YAML preview docked to the right
+      - component_ref: yaml_preview
+        direction: Right
+    analytics_id: builder_main_screen
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NAVIGATION
+# ─────────────────────────────────────────────────────────────────────────────
+navigation:
+  initial_screen: builder_main
+  type: stack
+  routes:
+    root:
+      screen: builder_main
+      path: /
+      auth_required: false
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WIDGET MAP
+# Default widgets used when auto-rendering schema-driven fields.
+# ─────────────────────────────────────────────────────────────────────────────
+widget_map:
+  string:       TextFormField
+  multiLineText: MultiLineTextFormField
+  number:       NumberFormField
+  boolean:      TristateCheckboxFormField
+  date:         DatePickerFormField
+  enum:         EnumFormField
+  choice:       ChoiceFormField
+  any:          AnyFormField
+  id:           TextFormField
+  secret:       PasswordFormField
+  reference:    SearchPickerFormField

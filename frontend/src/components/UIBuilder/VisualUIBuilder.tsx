@@ -7,6 +7,21 @@
  * Assets) uses FormEngine to render its fields — the same engine that renders
  * end-user forms. Form definitions live in ui_builder_forms.ts and conform to
  * the FormManifest schema.  onSubmit patches the UISystemManifest state.
+ *
+ * FIXED (compared to original UIBuilder/VisualUIBuilder.tsx)
+ *  1. All UI-layer types (UISystemManifest, Component, Screen, ThemeDefinition,
+ *     LayoutDirection, etc.) are now IMPORTED from UIEngine — the single source
+ *     of truth — instead of being redeclared locally with incomplete shapes.
+ *  2. The local UIComponent / UIScreen / UINavigation aliases are replaced by
+ *     the canonical Component / Screen / NavigationConfig from UIEngine/types.
+ *  3. UIManifestRenderer is imported from UIEngine (not from this file).
+ *  4. The local ThemeDefinition re-declaration (which was missing typography,
+ *     spacing, radius, elevation, motion, dark_mode) is removed.
+ *
+ * ARCHITECTURE REMINDER
+ *  UIBuilder  uses UIEngine  to render ITS OWN UI   (tab bar, panels, etc.)
+ *  UIBuilder  uses FormEngine to render the EDITOR FORMS inside each panel.
+ *  UIEngine   uses FormEngine when it encounters a type=Form component.
  */
 
 import React, { useState, useCallback, useEffect, useMemo } from "react";
@@ -17,6 +32,22 @@ import { VisualFormBuilder } from "@/components/FormBuilder/VisualFormBuilder";
 import { api } from "@/api";
 import { toast } from "sonner";
 
+// ── All UI-layer types come from UIEngine (single source of truth) ────────────
+import {
+  UISystemManifest,
+  Component,
+  Screen,
+  NavigationConfig,
+  ThemeDefinition,
+  LayoutDirection,
+  Route,
+} from "@form-engine/components/UIEngine/types";
+
+// ── The builder's own UI is rendered by UIEngine ──────────────────────────────
+// (UIBuilder wraps itself in UIEngineProvider + loads ui_builder.yaml)
+import { UIManifestRenderer } from "@form-engine/components/UIEngine/UIManifestRenderer";
+
+// ── Form helpers — see forms/ui_builder_forms.ts ──────────────────────────────
 import {
   buildUIBuilderManifest,
   overviewAnswers,
@@ -28,98 +59,17 @@ import {
   themeAnswers,
 } from "@/forms/ui_builder_forms";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Local aliases for convenience (use UIEngine canonical types) ──────────────
+// These are the same shapes — just shorter names used inside this file.
+type UIComponent  = Component;
+type UIScreen     = Screen;
+type UINavigation = NavigationConfig;
 
+// ─── Component type options (for the Add Component picker) ─────────────────────
 export type ComponentType =
   | "Tree" | "Table" | "Form" | "VerticalList" | "HorizontalList"
   | "Search" | "Card" | "Tile" | "FileGallery" | "FilterBuilder"
   | "Avatar" | "Custom";
-
-export type LayoutDirection =
-  | "Center" | "Top" | "Bottom" | "Left" | "Right" | "Floating" | "Modal";
-
-export interface UIComponent {
-  name: string;
-  label?: string;
-  type: ComponentType;
-  form_ref?: string;
-  form_embed?: { mode?: "inline" | "modal" | "drawer" | "panel" };
-  schema_ref?: string;
-  text?: string;
-  foreground_color?: string;
-  background_color?: string;
-  feature_ref?: string;
-  theme_ref?: string;
-  sub_components?: Array<{ component_ref: string; direction: LayoutDirection }>;
-  actions?: Array<{ name: string; label?: string; on_press: string }>;
-}
-
-export interface UIScreen {
-  name: string;
-  label?: string;
-  icon_ref?: string;
-  is_home?: boolean;
-  nav_order?: number;
-  theme_ref?: string;
-  background_color?: string;
-  auth_rules?: { require_auth?: boolean; redirect_on_denied?: string };
-  allowed_role_categories?: string[];
-  components?: Array<{ component_ref: string; direction: LayoutDirection }>;
-}
-
-export interface UIRoute {
-  screen: string;
-  path?: string;
-  auth_required?: boolean;
-  feature_ref?: string;
-}
-
-export interface UINavigation {
-  initial_screen?: string;
-  type?: "tab_bar" | "drawer" | "stack" | "none";
-  tab_bar_position?: "top" | "bottom";
-  routes?: Record<string, UIRoute>;
-  guards?: string[];
-}
-
-export interface ThemeColors {
-  primary?: string;
-  primary_light?: string;
-  primary_dark?: string;
-  surface?: string;
-  on_surface?: string;
-  outline?: string;
-  error?: string;
-  success?: string;
-  warning?: string;
-}
-
-export interface ThemeDefinition {
-  label?: string;
-  extends?: string;
-  colors?: ThemeColors;
-  dark_mode?: Partial<ThemeColors>;
-  selectable?: boolean;
-  preview_color?: string;
-}
-
-export interface UISystemManifest {
-  manifest_id: string;
-  manifest_version?: string;
-  description?: string;
-  namespaces?: string[];
-  active_theme?: string;
-  engine?: { mode?: "reactive" | "static"; error_mode?: string; debounce_ms?: number };
-  forms?: Record<string, unknown>;
-  screens?: Record<string, UIScreen>;
-  components?: Record<string, UIComponent>;
-  navigation?: UINavigation;
-  themes?: Record<string, ThemeDefinition>;
-  icons?: Record<string, { type: string; name?: string; path?: string; alt?: string }>;
-  buttons?: Record<string, { name: string; label?: string; on_press: string }>;
-  dialogs?: Record<string, { title: string; body?: string }>;
-  toasts?: Record<string, { message: string; severity?: string; duration_ms?: number; position?: string; action?: { label: string; on_press: string } }>;
-}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -150,7 +100,8 @@ const COMPONENT_TYPE_ICONS: Record<string, string> = {
 };
 
 const DIRECTION_OPTIONS: LayoutDirection[] = [
-  "Center", "Top", "Bottom", "Left", "Right", "Floating", "Modal",
+  LayoutDirection.Center, LayoutDirection.Top, LayoutDirection.Bottom,
+  LayoutDirection.Left, LayoutDirection.Right, LayoutDirection.Floating, LayoutDirection.Modal,
 ];
 
 const DIRECTION_ICONS: Record<string, string> = {
@@ -335,9 +286,6 @@ export function VisualUIBuilder({ initialManifest, onChange }: VisualUIBuilderPr
 }
 
 // ─── Shared: FormEngine wrapper ───────────────────────────────────────────────
-// Thin wrapper that:
-//  1. Adds a stable key so FormEngine remounts when the edited entity changes
-//  2. Styles the wrapper with a subtle inset border matching the builder theme
 
 function BuilderForm({
   formKey,
@@ -507,7 +455,6 @@ function ScreensPanel({ manifest, builderManifest, selected, onSelect, onUpdate 
           ))}
         </div>
 
-        {/* Add screen mini-form */}
         <div className="border-t border-gray-200 dark:border-gray-700">
           <details className="group">
             <summary className="flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold text-blue-600 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/10 list-none">
@@ -538,7 +485,6 @@ function ScreensPanel({ manifest, builderManifest, selected, onSelect, onUpdate 
               <button onClick={() => deleteScreen(selected!)} className="text-xs text-red-500 hover:text-red-700 font-medium">Delete</button>
             </div>
 
-            {/* Screen fields via FormEngine */}
             <BuilderForm
               formKey={`screen-${selected}`}
               formId="screen_editor"
@@ -547,7 +493,6 @@ function ScreensPanel({ manifest, builderManifest, selected, onSelect, onUpdate 
               onSubmit={applyScreen}
             />
 
-            {/* Component placements — small interactive list below the form */}
             <PlacementsEditor
               placements={sel.components ?? []}
               componentKeys={compKeys}
@@ -643,13 +588,15 @@ function ComponentsPanel({
   const addFormToManifest = (fm: FormManifest) => {
     const fids = Object.keys(fm.forms ?? {});
     if (!fids.length) return;
-    onUpdate({ ...manifest, forms: { ...(manifest.forms ?? {}), ...fm.forms } });
+    const updatedForms = { ...(manifest.forms ?? {}), ...fm.forms };
     if (selected) {
       onUpdate({
         ...manifest,
-        forms: { ...(manifest.forms ?? {}), ...fm.forms },
+        forms: updatedForms,
         components: { ...components, [selected]: { ...components[selected], form_ref: fids[0] } },
       });
+    } else {
+      onUpdate({ ...manifest, forms: updatedForms });
     }
     toast.success(`Form "${fids[0]}" added`);
     onFormPickerModeChange("existing");
@@ -678,7 +625,6 @@ function ComponentsPanel({
 
   return (
     <div className="flex h-full overflow-hidden">
-      {/* List */}
       <div className="w-44 flex-shrink-0 border-r border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden">
         <div className="flex-1 overflow-auto">
           {compKeys.length === 0 && <p className="text-xs text-gray-400 p-3 text-center">No components</p>}
@@ -707,7 +653,6 @@ function ComponentsPanel({
           ))}
         </div>
 
-        {/* Add component */}
         <div className="border-t border-gray-200 dark:border-gray-700">
           <details className="group">
             <summary className="flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold text-blue-600 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/10 list-none">
@@ -727,7 +672,6 @@ function ComponentsPanel({
         </div>
       </div>
 
-      {/* Detail */}
       <div className="flex-1 overflow-auto">
         {!sel ? (
           <EmptyDetail icon="🧩" title="Select a component" subtitle="Choose a component or add one below." />
@@ -742,7 +686,6 @@ function ComponentsPanel({
               <button onClick={() => deleteComponent(selected!)} className="text-xs text-red-500 hover:text-red-700 font-medium">Delete</button>
             </div>
 
-            {/* Component fields via FormEngine */}
             <BuilderForm
               formKey={`comp-${selected}`}
               formId="component_editor"
@@ -751,7 +694,6 @@ function ComponentsPanel({
               onSubmit={applyComponent}
             />
 
-            {/* Form-type config section */}
             {sel.type === "Form" && (
               <FormComponentPanel
                 manifest={manifest}
@@ -768,7 +710,6 @@ function ComponentsPanel({
               />
             )}
 
-            {/* Sub-components */}
             <PlacementsEditor
               title="Sub-Components"
               placements={sel.sub_components ?? []}
@@ -817,7 +758,6 @@ function FormComponentPanel({
         </span>
       </div>
 
-      {/* Mode picker */}
       <div className="flex gap-0 px-4 pt-3">
         {([
           { id: "existing" as const, icon: "📂", label: "Existing" },
@@ -839,7 +779,6 @@ function FormComponentPanel({
         ))}
       </div>
 
-      {/* Existing — FormEngine renders form_config_editor */}
       {formPickerMode === "existing" && (
         <div className="px-1 pb-1">
           {Object.keys(manifest.forms ?? {}).length === 0 && (
@@ -857,7 +796,6 @@ function FormComponentPanel({
         </div>
       )}
 
-      {/* Wizard — FormEngine renders the form_creator manifest */}
       {formPickerMode === "wizard" && (
         <div className="p-4">
           {formCreatorLoading && (
@@ -906,7 +844,6 @@ function FormComponentPanel({
         </div>
       )}
 
-      {/* Advanced — VisualFormBuilder */}
       {formPickerMode === "advanced" && (
         <div className="p-4">
           {embeddedForms && Object.keys(embeddedForms.forms ?? {}).length > 0 ? (
@@ -939,7 +876,7 @@ function NavigationPanel({ manifest, builderManifest, onUpdate }: {
   builderManifest: FormManifest;
   onUpdate: (m: UISystemManifest) => void;
 }) {
-  const nav    = manifest.navigation ?? {};
+  const nav    = manifest.navigation ?? {} as UINavigation;
   const routes = nav.routes ?? {};
 
   const applyNav = (answers: FieldAnswers) => {
@@ -947,9 +884,9 @@ function NavigationPanel({ manifest, builderManifest, onUpdate }: {
       ...manifest,
       navigation: {
         ...nav,
-        type:              (answers.nav_type as UINavigation["type"]) || "stack",
-        initial_screen:    String(answers.initial_screen || "") || undefined,
-        tab_bar_position:  (answers.tab_bar_position as "top" | "bottom") || undefined,
+        type:             (answers.nav_type as UINavigation["type"]) || "stack",
+        initial_screen:   String(answers.initial_screen || "") || undefined,
+        tab_bar_position: (answers.tab_bar_position as "top" | "bottom") || undefined,
       },
     });
     toast.success("Navigation updated");
@@ -984,7 +921,6 @@ function NavigationPanel({ manifest, builderManifest, onUpdate }: {
     <div className="p-5 space-y-6">
       <PanelHeader icon="🧭" title="Navigation" subtitle="Stack type, initial screen, and routes" />
 
-      {/* Nav global settings via FormEngine */}
       <BuilderForm
         formKey={`nav-${manifest.manifest_id}`}
         formId="navigation_editor"
@@ -993,13 +929,11 @@ function NavigationPanel({ manifest, builderManifest, onUpdate }: {
         onSubmit={applyNav}
       />
 
-      {/* Routes */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Routes</h4>
         </div>
 
-        {/* Route list */}
         {Object.keys(routes).length > 0 && (
           <div className="space-y-2 mb-4">
             {Object.entries(routes).map(([key, r]) => (
@@ -1015,7 +949,6 @@ function NavigationPanel({ manifest, builderManifest, onUpdate }: {
           </div>
         )}
 
-        {/* Add route via FormEngine */}
         <details className="group">
           <summary className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 cursor-pointer list-none">
             <span className="group-open:rotate-90 transition-transform text-base leading-none">+</span>
@@ -1059,6 +992,10 @@ function ThemesPanel({ manifest, builderManifest, selected, onSelect, onUpdate }
           label:    String(answers.label || key),
           extends:  String(answers.extends || "default"),
           colors:   { primary: "#006FFD" },
+          typography: { scale: {} },
+          spacing: {},
+          radius: {},
+          elevation: {},
           selectable: true,
         },
       },
@@ -1081,6 +1018,7 @@ function ThemesPanel({ manifest, builderManifest, selected, onSelect, onUpdate }
           selectable:    Boolean(answers.selectable),
           preview_color: hex(answers.preview_color),
           colors: {
+            ...(themes[selected].colors ?? {}),
             primary:       String(answers.color_primary || ""),
             primary_light: String(answers.color_primary_light || "") || undefined,
             primary_dark:  String(answers.color_primary_dark  || "") || undefined,
@@ -1169,7 +1107,7 @@ function ThemesPanel({ manifest, builderManifest, selected, onSelect, onUpdate }
               formKey={`theme-${selected}`}
               formId="theme_editor"
               manifest={builderManifest}
-              initialAnswers={themeAnswers(sel as any)}
+              initialAnswers={themeAnswers(sel)}
               onSubmit={applyTheme}
             />
           </div>
@@ -1200,26 +1138,26 @@ function AssetsPanel({ manifest, builderManifest, onUpdate }: {
   ];
 
   const saveButton = (a: FieldAnswers) => {
-    const key = slugify(String(a.key)) || `btn_${Object.keys(buttons).length + 1}`;
+    const key = String(a.key || `btn_${Object.keys(buttons).length + 1}`).toLowerCase().replace(/\s+/g, "_");
     onUpdate({ ...manifest, buttons: { ...buttons, [key]: { name: key, label: String(a.label || ""), on_press: String(a.on_press || "navigate") } } });
     toast.success("Button saved");
   };
 
   const saveDialog = (a: FieldAnswers) => {
-    const key = slugify(String(a.key)) || `dialog_${Object.keys(dialogs).length + 1}`;
+    const key = String(a.key || `dialog_${Object.keys(dialogs).length + 1}`).toLowerCase().replace(/\s+/g, "_");
     onUpdate({ ...manifest, dialogs: { ...dialogs, [key]: { title: String(a.title || ""), body: String(a.body || "") || undefined } } });
     toast.success("Dialog saved");
   };
 
   const saveToast = (a: FieldAnswers) => {
-    const key = slugify(String(a.key)) || `toast_${Object.keys(toasts).length + 1}`;
+    const key = String(a.key || `toast_${Object.keys(toasts).length + 1}`).toLowerCase().replace(/\s+/g, "_");
     onUpdate({ ...manifest, toasts: { ...toasts, [key]: { message: String(a.message || ""), severity: String(a.severity || "info") } } });
     toast.success("Toast saved");
   };
 
   const saveIcon = (a: FieldAnswers) => {
-    const key = slugify(String(a.key)) || `icon_${Object.keys(icons).length + 1}`;
-    onUpdate({ ...manifest, icons: { ...icons, [key]: { type: String(a.type || "lucide"), name: String(a.name || "") || undefined } } });
+    const key = String(a.key || `icon_${Object.keys(icons).length + 1}`).toLowerCase().replace(/\s+/g, "_");
+    onUpdate({ ...manifest, icons: { ...icons, [key]: { type: String(a.type || "lucide") as any, name: String(a.name || "") || undefined } } });
     toast.success("Icon saved");
   };
 
@@ -1233,7 +1171,6 @@ function AssetsPanel({ manifest, builderManifest, onUpdate }: {
     <div className="p-5 space-y-4">
       <PanelHeader icon="📦" title="Assets" subtitle="Reusable buttons, dialogs, toasts, and icons" />
 
-      {/* Tab bar */}
       <div className="flex gap-0 bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
         {TABS.map(t => (
           <button
@@ -1250,7 +1187,6 @@ function AssetsPanel({ manifest, builderManifest, onUpdate }: {
         ))}
       </div>
 
-      {/* Existing items */}
       {tab === "buttons" && Object.keys(buttons).length > 0 && (
         <div className="space-y-1.5">
           {Object.entries(buttons).map(([key, b]) => (
@@ -1284,7 +1220,6 @@ function AssetsPanel({ manifest, builderManifest, onUpdate }: {
         </div>
       )}
 
-      {/* Add form via FormEngine */}
       <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div className="px-4 py-2 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-100 dark:border-gray-700">
           <span className="text-xs font-semibold text-gray-500">
@@ -1309,9 +1244,6 @@ function AssetsPanel({ manifest, builderManifest, onUpdate }: {
 }
 
 // ─── Placements Editor ────────────────────────────────────────────────────────
-// Component placements / sub-components stay as a lightweight interactive list
-// (they have multi-field rows that aren't a good fit for a full FormEngine
-// single-page form, and they're structural rather than data).
 
 function PlacementsEditor({
   title = "Component Placements",
@@ -1331,7 +1263,7 @@ function PlacementsEditor({
       <div className="flex items-center justify-between mb-2">
         <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{title}</label>
         <button
-          onClick={() => onChange([...placements, { component_ref: componentKeys[0] ?? "", direction: "Center" }])}
+          onClick={() => onChange([...placements, { component_ref: componentKeys[0] ?? "", direction: LayoutDirection.Center }])}
           className="text-xs text-blue-600 hover:text-blue-800 font-medium"
         >
           + Add

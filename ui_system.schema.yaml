@@ -1,0 +1,2606 @@
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  ui_system.schema.yaml  —  v1.0.0                                           ║
+# ║  Unified UI System Schema                                                   ║
+# ║                                                                              ║
+# ║  Merged from:                                                               ║
+# ║    form_schema_v4.yaml      — Form Engine Manifest (v4.0.0)                ║
+# ║    ui_design.yaml           — UI Design Manifest (v1.0.0)                  ║
+# ║    design_additions.yaml    — UI Design Patch (v1.0.0 additions)           ║
+# ║                                                                              ║
+# ║  New additions in this merge:                                               ║
+# ║    Themes    — Named theme registry, inheritance, role-based overrides,    ║
+# ║               dark-mode variants, runtime theme switching                  ║
+# ║    Templates — Parametrized reusable screen / component / form templates   ║
+# ║               with variable substitution at instantiation time             ║
+# ║                                                                              ║
+# ║  Auth-based runtime rendering model:                                       ║
+# ║    feature_ref          → UAM feature gate (screens, components, routes)   ║
+# ║    allowed_role_categories → restricts screen / form access by role type   ║
+# ║    visible_access_levels   → field / component access-level filtering      ║
+# ║    hidden_condition        → expression-driven hide (context.auth.*)       ║
+# ║    role_preferences        → per-role theme, locale, column visibility     ║
+# ║    ResolvedAuth.fields     → server-driven field restriction list          ║
+# ║                                                                              ║
+# ║  Namespace contract:                                                        ║
+# ║    core     — Event, Audited, DataRef, Formula, Pattern                    ║
+# ║    schemata — Schema, Field, Relationship, Group, DataType                 ║
+# ║    uam      — RoleCategory, AccessLevel, Auth, Feature, Permission         ║
+# ║    form     — FormEngine types (authoritative below)                       ║
+# ║    ui       — UIDesign types (authoritative below)                         ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+$schema: "https://json-schema.org/draft/2020-12/schema"
+$id:     "https://schemas.example.com/ui-system/v1/ui_system.schema.yaml"
+title:   UISystemManifest
+
+description: >
+  Top-level manifest for the complete UI system. A single YAML file conforming
+  to this schema describes the entire application: its forms, screens, components,
+  navigation, themes, and templates — all wired to a UAM (User & Access Management)
+  layer that drives runtime feature gating and per-role customisation.
+
+  Runtime auth rendering contract
+  ────────────────────────────────
+  At boot the runtime resolves a uam#Auth object for the current user (via
+  auth_context_key) and applies the following pipeline in order:
+
+    1. Feature gates   — screens, components, and routes whose feature_ref is
+                         not in auth.features are removed from the view tree.
+    2. Role categories — screens and forms whose allowed_role_categories does
+                         not include the user's category are hidden.
+    3. Access levels   — components and fields whose visible_access_levels does
+                         not include auth.accessLevel are hidden.
+    4. Auth field list — when auth.fields is non-empty, form fields not in the
+                         list are hidden and excluded from submission payloads.
+    5. Expressions     — hidden_condition / condition expressions that reference
+                         context.auth.* are re-evaluated on every auth change.
+    6. Role preferences — the matching role_preferences entry is merged on top
+                          of manifest defaults (theme, locale, column visibility).
+
+type: object
+additionalProperties: false
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TOP-LEVEL SECTIONS
+# ─────────────────────────────────────────────────────────────────────────────
+properties:
+
+  # ── Document identity ───────────────────────────────────────────────────────
+  manifest_id:
+    type: string
+    pattern: "^[a-z][a-z0-9_]*$"
+    minLength: 2
+    maxLength: 80
+    description: >
+      Unique identifier for this manifest file.
+      Used to namespace all form IDs, screen keys, and component keys.
+
+  manifest_version:
+    type: string
+    pattern: "^\\d+\\.\\d+\\.\\d+$"
+    default: "1.0.0"
+
+  description:
+    type: string
+    maxLength: 2000
+
+  # ── Namespace imports ────────────────────────────────────────────────────────
+  namespaces:
+    type: array
+    description: >
+      Ordered list of namespaces this manifest depends on.
+      The runtime resolves "namespace#TypeName" cross-references using this list.
+    items:
+      type: string
+      enum: [core, schemata, uam, form, ui]
+    uniqueItems: true
+    default: [core, schemata, uam, form, ui]
+
+  # ══════════════════════════════════════════════════════════════════════════════
+  # FORM ENGINE  (from form_schema_v4.yaml)
+  # ══════════════════════════════════════════════════════════════════════════════
+
+  engine:
+    $ref: "#/$defs/EngineConfig"
+
+  types:
+    $ref: "#/$defs/TypeSystem"
+
+  models:
+    type: object
+    description: >
+      Named domain models. A form may bind its fields to a model via
+      "model: ModelName". The model provides type information and enables
+      deep-path binding (e.g. bind: address.city).
+    additionalProperties:
+      $ref: "#/$defs/ModelDef"
+
+  conditions:
+    type: object
+    description: >
+      Named condition definitions reusable across forms, sections, components,
+      and screens. Reference with { ref: conditionName }.
+    additionalProperties:
+      $ref: "#/$defs/NamedCondition"
+
+  validation:
+    $ref: "#/$defs/ValidationRegistry"
+
+  actions:
+    type: object
+    description: >
+      Named action definitions triggered by form events, button presses,
+      lifecycle hooks, or gestures.
+    additionalProperties:
+      $ref: "#/$defs/ActionDef"
+
+  data_sources:
+    type: object
+    description: >
+      Named data source definitions. Select/multiselect fields and components
+      reference these by name instead of embedding REST config inline.
+      Supports {{context.*}} and {{fields.*}} token interpolation.
+    additionalProperties:
+      $ref: "#/$defs/DataSourceDef"
+
+  i18n:
+    type: object
+    description: >
+      Translation tables keyed by BCP-47 locale code (e.g. "en-US", "ar-AE").
+      Each locale maps field IDs, screen labels, and component text keys to
+      translated strings. The runtime picks the table matching the active locale.
+    additionalProperties:
+      type: object
+      additionalProperties:
+        type: string
+
+  tracking:
+    $ref: "#/$defs/TrackingConfig"
+
+  forms:
+    type: object
+    description: One or more form definitions keyed by form_id.
+    additionalProperties:
+      $ref: "#/$defs/Form"
+
+  # ══════════════════════════════════════════════════════════════════════════════
+  # UI LAYER  (from ui_design.yaml)
+  # ══════════════════════════════════════════════════════════════════════════════
+
+  icons:
+    type: object
+    description: >
+      Named icon definitions. Components, buttons, screens, and toasts
+      reference icons by the key defined here.
+    additionalProperties:
+      $ref: "#/$defs/IconEntry"
+
+  breakpoints:
+    type: object
+    description: >
+      Named responsive viewport breakpoints. Component layout and visibility
+      rules reference these by name.
+    additionalProperties:
+      $ref: "#/$defs/Breakpoint"
+
+  navigation:
+    $ref: "#/$defs/NavigationConfig"
+
+  features:
+    type: object
+    description: >
+      Named application feature definitions. A feature groups components
+      behind a UAM feature gate (uam#Feature). Screens and components reference
+      features via feature_ref; the runtime hides them when the gate is closed.
+    additionalProperties:
+      $ref: "#/$defs/Feature"
+
+  buttons:
+    type: object
+    description: Named reusable button definitions.
+    additionalProperties:
+      $ref: "#/$defs/Button"
+
+  components:
+    type: object
+    description: >
+      Named reusable view component definitions. Screens compose these via
+      SubComponentPlacement. A component may embed a full form engine instance
+      via form_ref / form_embed when type=Form.
+    additionalProperties:
+      $ref: "#/$defs/Component"
+
+  screens:
+    type: object
+    description: >
+      Named screen definitions. Access is controlled by feature_ref,
+      allowed_role_categories, and auth_rules. Screens reference components
+      via SubComponentPlacement and may link to secondary screens.
+    additionalProperties:
+      $ref: "#/$defs/Screen"
+
+  toasts:
+    type: object
+    description: Named toast / snackbar definitions.
+    additionalProperties:
+      $ref: "#/$defs/Toast"
+
+  dialogs:
+    type: object
+    description: Named dialog / modal definitions.
+    additionalProperties:
+      $ref: "#/$defs/Dialog"
+
+  transitions:
+    type: object
+    description: Named transition / animation presets.
+    additionalProperties:
+      $ref: "#/$defs/Transition"
+
+  # ══════════════════════════════════════════════════════════════════════════════
+  # WIDGET MAP & ROLE PREFERENCES  (from design_additions.yaml)
+  # ══════════════════════════════════════════════════════════════════════════════
+
+  widget_map:
+    $ref: "#/$defs/WidgetMap"
+    description: >
+      Maps schemata#DataType values to the default widget component name.
+      Used when auto-rendering schema-driven forms or table columns.
+      Individual components can override per-field via field_widget_overrides.
+
+  role_preferences:
+    type: object
+    description: >
+      Per-role UI preference overrides keyed by uam#Role.roleName.
+      At runtime the engine merges the matching entry on top of manifest
+      defaults. Allows a role (e.g. Customer vs Employee) to get a different
+      theme, default locale, or column visibility without a separate manifest.
+    additionalProperties:
+      $ref: "#/$defs/RolePreferenceOverride"
+
+  # ══════════════════════════════════════════════════════════════════════════════
+  # THEMES  (new — named registry extending ui_design Theme)
+  # ══════════════════════════════════════════════════════════════════════════════
+
+  themes:
+    type: object
+    description: >
+      Named theme definitions. At runtime the engine loads the theme identified
+      by active_theme, then layers the user's role_preferences.theme_extends on
+      top. Themes support single-level inheritance via the "extends" key.
+
+      Built-in base theme names (no definition required — provided by the runtime):
+        default  — runtime's default theme.
+        material — Material Design 3 tokens.
+        ios-hig  — Apple HIG tokens.
+        fluent   — Microsoft Fluent tokens.
+
+      Custom themes defined here override or extend any base theme.
+    additionalProperties:
+      $ref: "#/$defs/ThemeDefinition"
+
+  active_theme:
+    type: string
+    description: >
+      Key of the theme (from the "themes" map or a built-in base theme name)
+      used as the application default. Role preferences may further override
+      this per-role via role_preferences[role].theme_extends.
+    default: default
+    maxLength: 60
+
+  # ══════════════════════════════════════════════════════════════════════════════
+  # TEMPLATES  (new)
+  # ══════════════════════════════════════════════════════════════════════════════
+
+  templates:
+    $ref: "#/$defs/TemplateRegistry"
+    description: >
+      Named reusable templates for screens, components, and forms.
+      A template is a parametrized blueprint — it declares a set of "variables"
+      that must be supplied at instantiation. The runtime substitutes
+      {{var_name}} tokens throughout the instantiated definition.
+
+      Use cases:
+        CRUD screen template   — instantiate once per entity type.
+        Card tile template     — consistent card style across dashboards.
+        Wizard form template   — multi-step form with common header/footer.
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# $defs
+# ══════════════════════════════════════════════════════════════════════════════
+$defs:
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  FORM ENGINE — EngineConfig                                              ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  EngineConfig:
+    type: object
+    additionalProperties: false
+    description: Controls the runtime evaluation strategy for the form engine.
+    properties:
+      mode:
+        type: string
+        enum: [reactive, static]
+        default: reactive
+        description: >
+          reactive — fields, conditions, and computed values re-evaluate
+                     automatically whenever any dependency changes.
+          static   — evaluation is triggered only on explicit events (blur, submit).
+      evaluation_order:
+        type: string
+        enum: [dependency, declaration]
+        default: dependency
+      error_mode:
+        type: string
+        enum: [fail-fast, collect-all]
+        default: collect-all
+      debounce_ms:
+        type: integer
+        minimum: 0
+        default: 300
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  FORM ENGINE — TypeSystem                                                ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  TypeSystem:
+    type: object
+    additionalProperties: false
+    properties:
+      primitives:
+        type: object
+        additionalProperties:
+          type: object
+      enums:
+        type: object
+        additionalProperties:
+          type: object
+          required: [values]
+          additionalProperties: false
+          properties:
+            values:
+              type: array
+              items:
+                oneOf:
+                  - type: string
+                  - type: integer
+              minItems: 1
+            description:
+              type: string
+      objects:
+        type: object
+        additionalProperties:
+          $ref: "#/$defs/ObjectTypeDef"
+      aliases:
+        type: object
+        additionalProperties:
+          $ref: "#/$defs/AliasTypeDef"
+
+  ObjectTypeDef:
+    type: object
+    additionalProperties: false
+    required: [fields]
+    properties:
+      description:
+        type: string
+      fields:
+        type: object
+        additionalProperties:
+          type: object
+          properties:
+            type: { type: string }
+            required: { type: boolean }
+            description: { type: string }
+
+  AliasTypeDef:
+    type: object
+    additionalProperties: false
+    required: [type]
+    properties:
+      type:
+        type: string
+      description:
+        type: string
+      validation:
+        type: array
+        items:
+          type: object
+          required: [type]
+          properties:
+            type:
+              type: string
+              enum: [regex, min, max, min_length, max_length, custom]
+            value: {}
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  FORM ENGINE — Models                                                    ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  ModelDef:
+    type: object
+    additionalProperties: false
+    required: [fields]
+    properties:
+      description:
+        type: string
+      inherits:
+        type: array
+        items:
+          type: string
+        uniqueItems: true
+      fields:
+        type: object
+        additionalProperties:
+          type: object
+          properties:
+            type: { type: string }
+            required: { type: boolean }
+            description: { type: string }
+            confidentiality:
+              $ref: "#/$defs/ConfidentialityType"
+            personal_data:
+              type: boolean
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  FORM ENGINE — Named Registries                                          ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  NamedCondition:
+    type: object
+    required: [expression]
+    additionalProperties: false
+    properties:
+      description:
+        type: string
+      expression:
+        type: string
+        minLength: 1
+        maxLength: 1000
+      condition:
+        $ref: "#/$defs/Condition"
+
+  ValidationRegistry:
+    type: object
+    additionalProperties: false
+    properties:
+      rules:
+        type: object
+        additionalProperties:
+          $ref: "#/$defs/NamedValidationRule"
+
+  NamedValidationRule:
+    type: object
+    required: [type]
+    additionalProperties: false
+    properties:
+      type:
+        type: string
+        enum: [required, regex, min, max, min_length, max_length,
+               min_date, max_date, min_selected, max_selected,
+               expression, custom, async]
+      description:
+        type: string
+      value: {}
+      expression:
+        type: string
+        maxLength: 1000
+      message:
+        type: string
+        maxLength: 200
+      handler:
+        type: string
+
+  ActionDef:
+    type: object
+    required: [type]
+    additionalProperties: false
+    properties:
+      type:
+        type: string
+        enum: [set_field, show_section, hide_section, navigate, api_call,
+               emit_event, show_toast, show_dialog, custom]
+      description:
+        type: string
+      params:
+        type: array
+        items:
+          type: string
+      handler:
+        type: string
+      # Extended for UI actions
+      toast_ref:
+        type: string
+        description: Key from manifest "toasts". Used when type=show_toast.
+        maxLength: 80
+      dialog_ref:
+        type: string
+        description: Key from manifest "dialogs". Used when type=show_dialog.
+        maxLength: 80
+
+  DataSourceDef:
+    type: object
+    required: [type]
+    additionalProperties: false
+    properties:
+      type:
+        type: string
+        enum: [rest, local, graphql]
+      description:
+        type: string
+      endpoint:
+        type: string
+        minLength: 1
+      method:
+        type: string
+        enum: [GET, POST]
+        default: GET
+      headers:
+        type: object
+        additionalProperties:
+          type: string
+      query_params:
+        type: object
+        additionalProperties:
+          type: string
+      body_template:
+        type: string
+      response_path:
+        type: string
+        default: ""
+      value_key:
+        type: string
+      label_key:
+        type: string
+      group_key:
+        type: string
+      search_param:
+        type: string
+      cache_ttl_seconds:
+        type: integer
+        minimum: 0
+        default: 300
+      handler:
+        type: string
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  FORM ENGINE — Tracking                                                  ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  TrackingConfig:
+    type: object
+    additionalProperties: false
+    properties:
+      provider:
+        type: string
+        minLength: 1
+      events:
+        type: object
+        additionalProperties:
+          type: object
+          required: [trigger]
+          additionalProperties: false
+          properties:
+            trigger:
+              type: string
+              enum: [onChange, onBlur, onFocus, onSubmit, onPageChange,
+                     onSectionEnter, onSectionExit, onError, onDraftSave,
+                     onScreenView, onComponentMount]
+            payload:
+              type: object
+              additionalProperties:
+                type: string
+            condition:
+              $ref: "#/$defs/ConditionOrRef"
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  FORM ENGINE — UAM Integration                                           ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  AccessLevel:
+    type: string
+    description: >
+      [Authoritative definition — mirrors uam#AccessLevel]
+      The scope of data records a user may read or write:
+        Self       — only records owned by the current user.
+        Delegated  — records the current user has been explicitly delegated.
+        Team       — records owned by any member of the user's team(s).
+        Reportee   — records owned by the user's direct reportees.
+        Category   — all records within the user's role category scope.
+    enum: [Self, Delegated, Team, Reportee, Category]
+
+  RoleCategory:
+    type: string
+    description: >
+      [Authoritative definition — mirrors uam#RoleCategory]
+      Broad classification of who is filling / operating this form or viewing
+      this screen:
+        Customer   — external end-user.
+        Employee   — internal employee.
+        Partner    — external partner / vendor.
+        Contractor — temporary contractor.
+        Automaton  — automated process / bot.
+    enum: [Customer, Employee, Partner, Contractor, Automaton]
+
+  ResolvedAuth:
+    type: object
+    description: >
+      Shape of the uam#Auth object the engine expects at context[auth_context_key].
+      Computed by the UAM service; the runtime READS this but never writes it.
+      Drives the six-step auth rendering pipeline described in the manifest header.
+    additionalProperties: false
+    properties:
+      userId:         { type: string }
+      schemaId:       { type: string }
+      roleCategory:
+        $ref: "#/$defs/RoleCategory"
+      roleNames:
+        type: array
+        description: All active role names for this user (matched against role_preferences).
+        items:
+          type: string
+      features:
+        type: array
+        description: UAM feature keys this user's roles grant access to.
+        items:
+          type: string
+        uniqueItems: true
+      read:           { type: boolean, default: false }
+      create:         { type: boolean, default: false }
+      update:         { type: boolean, default: false }
+      deactivate:     { type: boolean, default: false }
+      reactivate:     { type: boolean, default: false }
+      upload:         { type: boolean, default: false }
+      download:       { type: boolean, default: false }
+      print:          { type: boolean, default: false }
+      share:          { type: boolean, default: false }
+      accessLevel:
+        $ref: "#/$defs/AccessLevel"
+      fields:
+        type: array
+        description: >
+          When non-empty, only these field IDs are rendered and submitted.
+          An empty array means all fields are visible (no restriction).
+        items:
+          type: string
+      filters:
+        type: object
+        description: Key-value filters applied to all data_source queries.
+        additionalProperties:
+          type: string
+
+  FormAccess:
+    type: object
+    additionalProperties: false
+    properties:
+      feature_ref:
+        type: string
+        description: UAM feature key. Form not rendered if auth.features excludes this.
+        maxLength: 80
+      allowed_role_categories:
+        type: array
+        items:
+          $ref: "#/$defs/RoleCategory"
+        uniqueItems: true
+      auth_context_key:
+        type: string
+        default: auth
+        minLength: 1
+        maxLength: 60
+      submit_requires:
+        type: string
+        enum: [create, update, deactivate, reactivate, upload]
+      read_requires:
+        type: string
+        enum: [read, download, print, share]
+        default: read
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  FORM ENGINE — Form                                                      ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  Form:
+    type: object
+    required: [title, version, layout]
+    additionalProperties: false
+    properties:
+      title:
+        type: string
+        minLength: 1
+        maxLength: 120
+      description:
+        type: string
+        maxLength: 2000
+      version:
+        type: string
+        pattern: "^\\d+\\.\\d+\\.\\d+$"
+      form_state:
+        $ref: "#/$defs/FormState"
+        default: active
+      tags:
+        type: object
+        additionalProperties:
+          type: string
+      confidentiality:
+        $ref: "#/$defs/ConfidentialityType"
+        default: Internal
+      retention_days:
+        type: [integer, "null"]
+        minimum: 0
+      access:
+        $ref: "#/$defs/FormAccess"
+      model:
+        type: string
+      state:
+        type: object
+        additionalProperties: false
+        properties:
+          persistence:
+            type: string
+            enum: [localStorage, sessionStorage, tauri-fs, custom, none]
+            default: localStorage
+          auto_save:
+            type: boolean
+            default: false
+          draft_key:
+            type: string
+            minLength: 1
+            maxLength: 120
+      layout:
+        type: object
+        required: [type]
+        additionalProperties: false
+        properties:
+          type:
+            type: string
+            enum: [single-page, wizard, grid]
+          columns:
+            type: integer
+            minimum: 1
+            maximum: 12
+            default: 12
+      submit_label:
+        type: string
+        default: "Submit"
+        maxLength: 50
+      draft_label:
+        type: string
+        default: "Save Draft"
+        maxLength: 50
+      pages:
+        type: array
+        minItems: 1
+        maxItems: 30
+        items:
+          $ref: "#/$defs/Page"
+      sections:
+        type: array
+        minItems: 1
+        maxItems: 50
+        items:
+          $ref: "#/$defs/Section"
+      on_submit:
+        $ref: "#/$defs/SubmitAction"
+      # Theme override for this specific form
+      theme_ref:
+        type: string
+        description: >
+          Key from the manifest "themes" map. When set, this form is rendered
+          with the specified theme instead of the active_theme default.
+          Useful for branded forms (e.g. customer-facing vs internal admin).
+        maxLength: 60
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  FORM ENGINE — Page & Section                                            ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  Page:
+    type: object
+    required: [id, title, sections]
+    additionalProperties: false
+    properties:
+      id:
+        type: string
+        pattern: "^[a-z][a-z0-9_]*$"
+        maxLength: 60
+      title:
+        type: string
+        maxLength: 120
+      description:
+        type: string
+        maxLength: 1000
+      icon:
+        type: string
+        maxLength: 50
+      condition:
+        $ref: "#/$defs/ConditionOrRef"
+      on_enter:
+        $ref: "#/$defs/ActionRef"
+      on_exit:
+        $ref: "#/$defs/ActionRef"
+      sections:
+        type: array
+        minItems: 1
+        maxItems: 50
+        items:
+          $ref: "#/$defs/Section"
+
+  Section:
+    type: object
+    additionalProperties: false
+    properties:
+      id:
+        type: string
+        pattern: "^[a-z][a-z0-9_]*$"
+        maxLength: 60
+      title:
+        type: string
+        maxLength: 80
+      description:
+        type: string
+        maxLength: 1000
+      icon:
+        type: string
+        maxLength: 50
+      condition:
+        $ref: "#/$defs/ConditionOrRef"
+      bind_prefix:
+        type: string
+      component:
+        type: string
+      collection:
+        $ref: "#/$defs/Collection"
+      fields:
+        type: array
+        minItems: 1
+        maxItems: 200
+        items:
+          $ref: "#/$defs/Field"
+      cross_field_validations:
+        type: array
+        items:
+          $ref: "#/$defs/CrossFieldValidation"
+      groups:
+        type: array
+        items:
+          $ref: "#/$defs/FieldGroup"
+        minItems: 1
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  FORM ENGINE — Field Base & Discriminated Union                          ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  FieldBase:
+    type: object
+    required: [id]
+    properties:
+      id:
+        type: string
+        pattern: "^[a-z][a-z0-9_]*$"
+        maxLength: 60
+      type:
+        type: string
+        enum: [text, multiline, richtext, boolean, number, select, multiselect,
+               date, time, datetime, daterange, file, rating, color, json,
+               signature, location, hidden, complex]
+      bind:
+        type: string
+        minLength: 1
+      computed:
+        $ref: "#/$defs/ComputedField"
+      label:
+        type: string
+        maxLength: 120
+      hint:
+        type: string
+        maxLength: 300
+      placeholder:
+        type: string
+        maxLength: 120
+      widget:
+        type: string
+      required:
+        type: boolean
+        default: false
+      required_if:
+        type: string
+        maxLength: 500
+      readonly:
+        type: boolean
+        default: false
+      editability:
+        $ref: "#/$defs/EditabilityType"
+      default: {}
+      formula_default:
+        $ref: "#/$defs/FormulaDefault"
+      condition:
+        $ref: "#/$defs/ConditionOrRef"
+      clear_on_hide:
+        type: boolean
+        default: false
+      branch:
+        type: array
+        items:
+          $ref: "#/$defs/Branch"
+        minItems: 1
+      validation:
+        $ref: "#/$defs/Validation"
+      validate_on:
+        type: string
+        enum: [blur, change, submit]
+        default: blur
+      width:
+        type: string
+        enum: [full, half, third]
+        default: full
+      col_span:
+        type: integer
+        minimum: 1
+        maximum: 12
+      confidentiality:
+        $ref: "#/$defs/ConfidentialityType"
+      personal_data:
+        type: boolean
+        default: false
+      purpose:
+        type: string
+        maxLength: 500
+      retention_days:
+        type: [integer, "null"]
+        minimum: 0
+      system_generated:
+        type: boolean
+        default: false
+      summary_field:
+        type: boolean
+        default: false
+      key_field:
+        type: boolean
+        default: false
+      advanced:
+        type: boolean
+        default: false
+      ui_only:
+        type: boolean
+        default: false
+      one_of_group:
+        type: string
+        maxLength: 60
+      permission_ref:
+        type: string
+        maxLength: 80
+      visible_access_levels:
+        type: array
+        items:
+          $ref: "#/$defs/AccessLevel"
+        uniqueItems: true
+      tags:
+        type: object
+        additionalProperties:
+          type: string
+    if:
+      properties:
+        personal_data:
+          const: true
+    then:
+      required: [purpose]
+      properties:
+        confidentiality:
+          not:
+            const: Public
+
+  ComputedField:
+    type: object
+    required: [expression]
+    additionalProperties: false
+    properties:
+      expression:
+        type: string
+        minLength: 1
+        maxLength: 1000
+      type_hint:
+        type: string
+        enum: [string, number, boolean, date, datetime]
+
+  Field:
+    description: A form field discriminated by "type".
+    oneOf:
+      - $ref: "#/$defs/TextField"
+      - $ref: "#/$defs/MultilineField"
+      - $ref: "#/$defs/RichTextField"
+      - $ref: "#/$defs/BooleanField"
+      - $ref: "#/$defs/NumberField"
+      - $ref: "#/$defs/SelectField"
+      - $ref: "#/$defs/MultiselectField"
+      - $ref: "#/$defs/DateField"
+      - $ref: "#/$defs/TimeField"
+      - $ref: "#/$defs/DateTimeField"
+      - $ref: "#/$defs/DateRangeField"
+      - $ref: "#/$defs/FileField"
+      - $ref: "#/$defs/RatingField"
+      - $ref: "#/$defs/ColorField"
+      - $ref: "#/$defs/JsonField"
+      - $ref: "#/$defs/SignatureField"
+      - $ref: "#/$defs/LocationField"
+      - $ref: "#/$defs/HiddenField"
+      - $ref: "#/$defs/ComplexField"
+      - $ref: "#/$defs/BoundField"
+
+  BoundField:
+    allOf:
+      - $ref: "#/$defs/FieldBase"
+    unevaluatedProperties: false
+    required: [bind]
+    properties:
+      bind:
+        type: string
+        minLength: 1
+
+  TextField:
+    allOf: [{ $ref: "#/$defs/FieldBase" }]
+    unevaluatedProperties: false
+    properties:
+      type:        { const: text }
+      min_length:  { type: integer, minimum: 0 }
+      max_length:  { type: integer, minimum: 1 }
+      pattern:     { type: string }
+      pattern_message: { type: string, maxLength: 160 }
+      autocomplete: { type: string }
+
+  MultilineField:
+    allOf: [{ $ref: "#/$defs/FieldBase" }]
+    unevaluatedProperties: false
+    properties:
+      type:       { const: multiline }
+      rows:       { type: integer, minimum: 2, maximum: 30, default: 4 }
+      max_length: { type: integer, minimum: 1 }
+      resize:     { type: string, enum: [none, vertical, both], default: vertical }
+
+  RichTextField:
+    allOf: [{ $ref: "#/$defs/FieldBase" }]
+    unevaluatedProperties: false
+    properties:
+      type:       { const: richtext }
+      toolbar:
+        type: array
+        items:
+          type: string
+          enum: [bold, italic, underline, strike, code, heading1, heading2,
+                 heading3, bulletList, orderedList, blockquote, codeblock,
+                 link, image]
+        uniqueItems: true
+      max_length: { type: integer, minimum: 1 }
+
+  BooleanField:
+    allOf: [{ $ref: "#/$defs/FieldBase" }]
+    unevaluatedProperties: false
+    properties:
+      type:        { const: boolean }
+      display_as:  { type: string, enum: [switch, checkbox, yes-no-radio], default: switch }
+      true_label:  { type: string, default: "Yes", maxLength: 40 }
+      false_label: { type: string, default: "No",  maxLength: 40 }
+
+  NumberField:
+    allOf: [{ $ref: "#/$defs/FieldBase" }]
+    unevaluatedProperties: false
+    properties:
+      type:           { const: number }
+      number_type:    { $ref: "#/$defs/NumberType" }
+      signed:         { type: boolean, default: true }
+      multiple_of:    { type: number, exclusiveMinimum: 0 }
+      display_as:     { type: string, enum: [input, slider, stepper], default: input }
+      min:            { type: number }
+      max:            { type: number }
+      step:           { type: number, exclusiveMinimum: 0, default: 1 }
+      decimal_places: { type: integer, minimum: 0, maximum: 10, default: 0 }
+      prefix:         { type: string, maxLength: 10 }
+      suffix:         { type: string, maxLength: 10 }
+
+  SelectField:
+    allOf: [{ $ref: "#/$defs/FieldBase" }]
+    required: [choices]
+    unevaluatedProperties: false
+    properties:
+      type:         { const: select }
+      choices:      { $ref: "#/$defs/ChoiceSource" }
+      display_as:   { type: string, enum: [auto, radio, dropdown, button-group], default: auto }
+      allow_others: { type: boolean, default: false }
+      others_type:  { type: string, enum: [text, number], default: text }
+      option_filter:
+        type: object
+        additionalProperties:
+          type: string
+
+  MultiselectField:
+    allOf: [{ $ref: "#/$defs/FieldBase" }]
+    required: [choices]
+    unevaluatedProperties: false
+    properties:
+      type:         { const: multiselect }
+      choices:      { $ref: "#/$defs/ChoiceSource" }
+      display_as:   { type: string, enum: [auto, checkbox, dropdown, tag-input], default: auto }
+      min_selected: { type: integer, minimum: 0, default: 0 }
+      max_selected: { type: integer, minimum: 1 }
+      allow_others: { type: boolean, default: false }
+      others_type:  { type: string, enum: [text, number], default: text }
+      option_filter:
+        type: object
+        additionalProperties:
+          type: string
+
+  DateField:
+    allOf: [{ $ref: "#/$defs/FieldBase" }]
+    unevaluatedProperties: false
+    properties:
+      type:              { const: date }
+      use_current:       { type: boolean, default: false }
+      step_duration_s:   { type: integer, minimum: 1 }
+      min_date:          { $ref: "#/$defs/DateExpression" }
+      max_date:          { $ref: "#/$defs/DateExpression" }
+      disable_weekends:  { type: boolean, default: false }
+      disable_dates:
+        type: array
+        items: { type: string, format: date }
+      date_format:       { type: string, default: "dd/MM/yyyy" }
+
+  TimeField:
+    allOf: [{ $ref: "#/$defs/FieldBase" }]
+    unevaluatedProperties: false
+    properties:
+      type:         { const: time }
+      min_time:     { $ref: "#/$defs/HHmm" }
+      max_time:     { $ref: "#/$defs/HHmm" }
+      step_minutes: { type: integer, minimum: 1, maximum: 60, default: 15 }
+      use_24h:      { type: boolean, default: false }
+
+  DateTimeField:
+    allOf: [{ $ref: "#/$defs/FieldBase" }]
+    unevaluatedProperties: false
+    properties:
+      type:             { const: datetime }
+      use_current:      { type: boolean, default: false }
+      min_date:         { $ref: "#/$defs/DateExpression" }
+      max_date:         { $ref: "#/$defs/DateExpression" }
+      disable_weekends: { type: boolean, default: false }
+      disable_dates:
+        type: array
+        items: { type: string, format: date }
+      date_format:      { type: string, default: "dd/MM/yyyy" }
+      min_time:         { $ref: "#/$defs/HHmm" }
+      max_time:         { $ref: "#/$defs/HHmm" }
+      step_minutes:     { type: integer, minimum: 1, maximum: 60, default: 15 }
+      use_24h:          { type: boolean, default: false }
+
+  DateRangeField:
+    allOf: [{ $ref: "#/$defs/FieldBase" }]
+    unevaluatedProperties: false
+    properties:
+      type:             { const: daterange }
+      min_date:         { $ref: "#/$defs/DateExpression" }
+      max_date:         { $ref: "#/$defs/DateExpression" }
+      disable_weekends: { type: boolean, default: false }
+      disable_dates:
+        type: array
+        items: { type: string, format: date }
+      date_format:      { type: string, default: "dd/MM/yyyy" }
+      min_range_days:   { type: integer, minimum: 1 }
+      max_range_days:   { type: integer, minimum: 1 }
+
+  FileField:
+    allOf: [{ $ref: "#/$defs/FieldBase" }]
+    unevaluatedProperties: false
+    properties:
+      type:        { const: file }
+      accept:      { type: string }
+      max_size_mb: { type: number, exclusiveMinimum: 0, default: 10 }
+      max_files:   { type: integer, minimum: 1, default: 1 }
+      storage:     { type: string, enum: [memory, base64, tauri-fs], default: memory }
+
+  RatingField:
+    allOf: [{ $ref: "#/$defs/FieldBase" }]
+    unevaluatedProperties: false
+    properties:
+      type:       { const: rating }
+      max:        { type: integer, minimum: 2, maximum: 10, default: 5 }
+      display_as: { type: string, enum: [stars, numeric-scale, emoji-scale], default: stars }
+      low_label:  { type: string, maxLength: 40, default: "Poor" }
+      high_label: { type: string, maxLength: 40, default: "Excellent" }
+
+  ColorField:
+    allOf: [{ $ref: "#/$defs/FieldBase" }]
+    unevaluatedProperties: false
+    properties:
+      type:    { const: color }
+      format:  { type: string, enum: [hex, rgba, hsl], default: hex }
+      presets:
+        type: array
+        items: { type: string, pattern: "^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$" }
+        maxItems: 24
+
+  JsonField:
+    allOf: [{ $ref: "#/$defs/FieldBase" }]
+    unevaluatedProperties: false
+    properties:
+      type:   { const: json }
+      schema: { type: object }
+      rows:   { type: integer, minimum: 2, maximum: 40, default: 8 }
+
+  SignatureField:
+    allOf: [{ $ref: "#/$defs/FieldBase" }]
+    unevaluatedProperties: false
+    properties:
+      type:          { const: signature }
+      canvas_width:  { type: integer, minimum: 200, maximum: 1200, default: 600 }
+      canvas_height: { type: integer, minimum: 60,  maximum: 400,  default: 160 }
+      stroke_color:  { type: string }
+
+  LocationField:
+    allOf: [{ $ref: "#/$defs/FieldBase" }]
+    unevaluatedProperties: false
+    properties:
+      type:             { const: location }
+      mode:             { type: string, enum: [coordinates, address-search, map-pin], default: address-search }
+      geocoding_source: { type: string }
+
+  HiddenField:
+    allOf: [{ $ref: "#/$defs/FieldBase" }]
+    required: [value_from]
+    unevaluatedProperties: false
+    properties:
+      type:        { const: hidden }
+      value_from:  { type: string, enum: [default, context, query-param, computed] }
+      context_key: { type: string }
+      query_param: { type: string }
+
+  ComplexField:
+    allOf: [{ $ref: "#/$defs/FieldBase" }]
+    required: [complex_schema_id, cardinality]
+    unevaluatedProperties: false
+    properties:
+      type:                  { const: complex }
+      complex_schema_id:     { type: string, pattern: "^[a-z][a-z0-9_]*$" }
+      complex_schema_preview: { type: boolean, default: true }
+      cardinality:           { type: string, enum: [single, list, set, map] }
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  FORM ENGINE — Collection, Groups, Conditions, Branch, Validation        ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  Collection:
+    type: object
+    additionalProperties: false
+    properties:
+      min_items:          { type: integer, minimum: 0, default: 0 }
+      max_items:          { type: integer, minimum: 1 }
+      add_label:          { type: string, default: "Add Item", maxLength: 60 }
+      remove_label:       { type: string, default: "Remove", maxLength: 40 }
+      item_title_template: { type: string, maxLength: 120 }
+      sortable:           { type: boolean, default: false }
+      default_expanded:   { type: boolean, default: true }
+
+  CrossFieldValidation:
+    type: object
+    required: [fields, rule, message]
+    additionalProperties: false
+    properties:
+      fields:
+        type: array
+        minItems: 2
+        items: { type: string, pattern: "^[a-z][a-z0-9_]*$" }
+      rule:    { type: string, minLength: 1 }
+      message: { type: string, maxLength: 200 }
+
+  FieldGroup:
+    type: object
+    required: [name, applicable_on, group_type]
+    additionalProperties: false
+    properties:
+      name:         { type: string, pattern: "^[A-Za-z][A-Za-z0-9_]*$", maxLength: 60 }
+      description:  { type: string, maxLength: 300 }
+      applicable_on:
+        type: array
+        minItems: 2
+        items: { type: string, pattern: "^[a-z][a-z0-9_]*$" }
+        uniqueItems: true
+      group_type:   { $ref: "#/$defs/GroupType" }
+      message:      { type: string, maxLength: 200 }
+      index_type:   { type: string, enum: [NonUnique, Unique, Text] }
+      tags:
+        type: object
+        additionalProperties: { type: string }
+
+  ConditionOrRef:
+    description: Inline Condition or { ref: namedConditionKey }.
+    oneOf:
+      - $ref: "#/$defs/Condition"
+      - type: object
+        required: [ref]
+        additionalProperties: false
+        properties:
+          ref: { type: string, minLength: 1, maxLength: 80 }
+
+  Condition:
+    oneOf:
+      - $ref: "#/$defs/SimpleCondition"
+      - $ref: "#/$defs/CompositeCondition"
+      - $ref: "#/$defs/ExpressionCondition"
+
+  SimpleCondition:
+    type: object
+    required: [field, op]
+    additionalProperties: false
+    properties:
+      field: { type: string, pattern: "^[a-z][a-z0-9_.]*$" }
+      op:
+        type: string
+        enum: [eq, neq, in, not_in, gt, gte, lt, lte, contains, starts_with,
+               ends_with, is_empty, is_not_empty, is_true, is_false]
+      value: {}
+
+  CompositeCondition:
+    type: object
+    additionalProperties: false
+    oneOf:
+      - required: [all]
+        properties:
+          all:
+            type: array
+            minItems: 1
+            items: { $ref: "#/$defs/Condition" }
+      - required: [any]
+        properties:
+          any:
+            type: array
+            minItems: 1
+            items: { $ref: "#/$defs/Condition" }
+      - required: [not]
+        properties:
+          not: { $ref: "#/$defs/Condition" }
+
+  ExpressionCondition:
+    type: object
+    required: [expression]
+    additionalProperties: false
+    properties:
+      expression: { type: string, minLength: 1, maxLength: 1000 }
+
+  Branch:
+    type: object
+    required: [when, goTo]
+    additionalProperties: false
+    properties:
+      when: { $ref: "#/$defs/ConditionOrRef" }
+      goTo:
+        type: object
+        additionalProperties: false
+        properties:
+          page:    { type: string, pattern: "^[a-z][a-z0-9_]*$" }
+          section: { type: string, pattern: "^[a-z][a-z0-9_]*$" }
+          field:   { type: string, pattern: "^[a-z][a-z0-9_]*$" }
+
+  ActionRef:
+    oneOf:
+      - type: object
+        required: [ref]
+        additionalProperties: false
+        properties:
+          ref:    { type: string }
+          params: { type: object, additionalProperties: true }
+      - type: object
+        required: [action_type]
+        additionalProperties: false
+        properties:
+          action_type:
+            type: string
+            enum: [set_field, show_section, hide_section, navigate,
+                   api_call, emit_event, show_toast, show_dialog, custom]
+          params: { type: object, additionalProperties: true }
+
+  Validation:
+    type: object
+    additionalProperties: false
+    properties:
+      rule_ref:            { type: string }
+      required_message:    { type: string, maxLength: 160 }
+      min_length:          { type: integer, minimum: 0 }
+      min_length_message:  { type: string, maxLength: 160 }
+      max_length:          { type: integer, minimum: 1 }
+      max_length_message:  { type: string, maxLength: 160 }
+      pattern:             { type: string }
+      pattern_message:     { type: string, maxLength: 160 }
+      min:                 { type: number }
+      min_message:         { type: string, maxLength: 160 }
+      max:                 { type: number }
+      max_message:         { type: string, maxLength: 160 }
+      min_date:            { type: string }
+      min_date_message:    { type: string, maxLength: 160 }
+      max_date:            { type: string }
+      max_date_message:    { type: string, maxLength: 160 }
+      min_selected:        { type: integer, minimum: 0 }
+      max_selected:        { type: integer, minimum: 1 }
+      custom:              { type: string }
+      custom_message:      { type: string, maxLength: 160 }
+      async:               { type: string }
+      async_message:       { type: string, maxLength: 160 }
+
+  ChoiceSource:
+    type: object
+    additionalProperties: false
+    oneOf:
+      - required: [static]
+        properties:
+          static: { $ref: "#/$defs/StaticChoiceList" }
+      - required: [dynamic]
+        properties:
+          dynamic: { $ref: "#/$defs/DynamicChoicesConfig" }
+      - required: [source_ref]
+        properties:
+          source_ref: { type: string, minLength: 1 }
+
+  StaticChoiceList:
+    type: array
+    minItems: 1
+    items:
+      type: object
+      required: [value, label]
+      additionalProperties: false
+      properties:
+        value:    { oneOf: [{ type: string }, { type: integer }, { type: boolean }] }
+        label:    { type: string, maxLength: 120 }
+        group:    { type: string, maxLength: 60 }
+        icon:     { type: string, maxLength: 50 }
+        disabled: { type: boolean, default: false }
+
+  DynamicChoicesConfig:
+    type: object
+    required: [url, value_key, label_key]
+    additionalProperties: false
+    properties:
+      url:              { type: string, minLength: 1 }
+      method:           { type: string, enum: [GET, POST], default: GET }
+      headers:          { type: object, additionalProperties: { type: string } }
+      query_params:     { type: object, additionalProperties: { type: string } }
+      body_template:    { type: [string, "null"] }
+      response_path:    { type: string, default: "" }
+      value_key:        { type: string, minLength: 1 }
+      label_key:        { type: string, minLength: 1 }
+      group_key:        { type: string }
+      search_param:     { type: string }
+      depends_on:       { type: string, pattern: "^[a-z][a-z0-9_]*$" }
+      cache_ttl_seconds: { type: integer, minimum: 0, default: 300 }
+      option_filter:    { type: object, additionalProperties: { type: string } }
+
+  SubmitAction:
+    type: object
+    required: [type]
+    additionalProperties: false
+    properties:
+      type:            { type: string, enum: [rest, local, none] }
+      success_message: { type: string, default: "Form submitted successfully!", maxLength: 300 }
+      error_message:   { type: string, default: "Submission failed. Please try again.", maxLength: 300 }
+      # rest
+      url:              { type: string, minLength: 1 }
+      method:           { type: string, enum: [POST, PUT, PATCH], default: POST }
+      headers:          { type: object, additionalProperties: { type: string } }
+      transform_handler: { type: string }
+      # local
+      handler_name:     { type: string, minLength: 1 }
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  UI LAYER — Enums                                                        ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  ComponentType:
+    type: string
+    description: >
+      Visual rendering pattern of a component.
+        Tree           — hierarchical expandable/collapsible node structure.
+        Table          — rows-and-columns data grid.
+        Form           — field-input layout (embeds a form#Form via form_ref).
+        VerticalList   — scrollable vertical list.
+        HorizontalList — horizontally scrolling list (carousel).
+        Search         — search box + result list.
+        Card           — contained surface with header and actions.
+        Tile           — compact fixed-size clickable tile.
+        FileGallery    — file/image gallery (uses FileComponentConfig).
+        FilterBuilder  — visual filter condition builder (uses FilterBuilderConfig).
+        Avatar         — user avatar / profile display (uses AvatarConfig).
+        Custom         — hand-registered component name.
+    enum: [Tree, Table, Form, VerticalList, HorizontalList, Search, Card, Tile,
+           FileGallery, FilterBuilder, Avatar, Custom]
+
+  LayoutDirection:
+    type: string
+    description: >
+      Where a sub-component is anchored within its parent.
+        Center   — fills the central content area.
+        Top      — docked to the top edge (header / app bar).
+        Bottom   — docked to the bottom edge (tab bar / footer).
+        Left     — docked to the left edge (sidebar / nav drawer).
+        Right    — docked to the right edge (details panel).
+        Floating — absolutely positioned overlay; does not push content.
+        Modal    — blocks interaction below (use dialogs registry instead).
+    enum: [Center, Top, Bottom, Left, Right, Floating, Modal]
+
+  ButtonType:
+    type: string
+    enum: [Flat, Bevel, Swipe, Hover]
+
+  ButtonActionType:
+    type: string
+    enum: [CaptchaCheckSubmit, Submit, Clear, Cancel, Logout, Toggle, Custom]
+
+  ScreenAccessType:
+    type: string
+    enum: [Stacked, Drawer, PopupMenuTop, PopupMenuBottom]
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  UI LAYER — Icon Entry                                                   ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  IconEntry:
+    type: object
+    additionalProperties: false
+    required: [type]
+    properties:
+      type:      { type: string, enum: [svg, png, lucide, fontawesome, custom] }
+      path:      { type: string, maxLength: 300 }
+      name:      { type: string, maxLength: 80 }
+      component: { type: string, maxLength: 80 }
+      alt:       { type: string, maxLength: 120 }
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  UI LAYER — Breakpoint                                                   ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  Breakpoint:
+    type: object
+    additionalProperties: false
+    required: [min_width_px]
+    properties:
+      min_width_px: { type: integer, minimum: 0 }
+      max_width_px: { type: [integer, "null"] }
+      label:        { type: string, maxLength: 40 }
+      columns:      { type: integer, minimum: 1, maximum: 24 }
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  UI LAYER — Navigation                                                   ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  NavigationConfig:
+    type: object
+    additionalProperties: false
+    properties:
+      initial_screen:   { type: string, minLength: 1 }
+      type:             { type: string, enum: [tab_bar, drawer, stack, none], default: tab_bar }
+      tab_bar_position: { type: string, enum: [top, bottom], default: bottom }
+      routes:
+        type: object
+        additionalProperties:
+          $ref: "#/$defs/Route"
+      guards:
+        type: array
+        items: { type: string, minLength: 1 }
+
+  Route:
+    type: object
+    additionalProperties: false
+    required: [screen]
+    properties:
+      screen:       { type: string, minLength: 1 }
+      path:         { type: string, maxLength: 300 }
+      params:       { type: object, additionalProperties: { type: string } }
+      auth_required: { type: boolean, default: true }
+      feature_ref:  { type: string, maxLength: 80 }
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  UI LAYER — Feature                                                      ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  Feature:
+    type: object
+    additionalProperties: false
+    required: [name]
+    properties:
+      name:
+        type: string
+        minLength: 1
+        maxLength: 80
+        description: >
+          Must match a uam#Feature name. The runtime checks auth.features
+          for this value before rendering any component or screen that
+          references this feature.
+      label:
+        type: string
+        maxLength: 120
+      confidentiality:
+        $ref: "#/$defs/ConfidentialityType"
+      components:
+        type: array
+        description: Component keys gated by this feature.
+        items: { type: string, minLength: 1 }
+        uniqueItems: true
+      screens:
+        type: array
+        description: Screen keys gated by this feature.
+        items: { type: string, minLength: 1 }
+        uniqueItems: true
+      forms:
+        type: array
+        description: Form IDs gated by this feature.
+        items: { type: string, minLength: 1 }
+        uniqueItems: true
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  UI LAYER — Button                                                       ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  Button:
+    type: object
+    additionalProperties: false
+    required: [name, on_press]
+    properties:
+      name:               { type: string, minLength: 1, maxLength: 80 }
+      label:              { type: string, maxLength: 120 }
+      button_type:        { $ref: "#/$defs/ButtonType", default: Flat }
+      on_press:           { type: string }
+      custom_handler:     { type: string, maxLength: 80 }
+      icon_ref:           { type: string, maxLength: 80 }
+      icon_path:          { type: string, maxLength: 300 }
+      background_pic_path: { type: string, maxLength: 300 }
+      text_size:          { type: [number, string] }
+      foreground_color:   { type: string, pattern: "^[A-Fa-f0-9]{6}$" }
+      background_color:   { type: string, pattern: "^[A-Fa-f0-9]{6}$" }
+      disabled_condition: { $ref: "#/$defs/ConditionOrRef" }
+      hidden_condition:   { $ref: "#/$defs/ConditionOrRef" }
+      accessibility:      { $ref: "#/$defs/AccessibilityProps" }
+      confirm_dialog_ref: { type: string, maxLength: 80 }
+      analytics_event:    { type: string, maxLength: 80 }
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  UI LAYER — Component                                                    ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  Component:
+    type: object
+    additionalProperties: false
+    required: [name, type]
+    properties:
+      name:       { type: string, minLength: 1, maxLength: 80 }
+      label:      { type: string, maxLength: 120 }
+      type:       { $ref: "#/$defs/ComponentType" }
+
+      # ── Data binding ────────────────────────────────────────────────────────
+      schema_ref:   { type: string, minLength: 1 }
+      form_ref:
+        type: string
+        description: >
+          Key of a form definition from the manifest "forms" map.
+          Required when type=Form. The component embeds the full form engine.
+          form_embed controls how the form is presented (inline, wizard, modal).
+        minLength: 1
+      form_embed:
+        $ref: "#/$defs/FormEmbedConfig"
+      data_binding:
+        $ref: "#/$defs/DataBinding"
+
+      # ── Display ─────────────────────────────────────────────────────────────
+      text:               { type: string }
+      text_size:          { type: [number, string] }
+      foreground_color:   { type: string, pattern: "^[A-Fa-f0-9]{6}$" }
+      background_color:   { type: string, pattern: "^[A-Fa-f0-9]{6}$" }
+      background_pic_path: { type: string, maxLength: 300 }
+
+      # ── Field / column overrides ─────────────────────────────────────────────
+      fields:
+        type: array
+        description: >
+          When present, only these schema field names are rendered in this
+          component. An empty array means all fields are shown.
+        items: { type: string }
+        uniqueItems: true
+      field_widget_overrides:
+        type: object
+        description: >
+          Maps field names to widget names, overriding widget_map defaults
+          for this component only. Key = field name; value = widget name.
+        additionalProperties:
+          type: string
+      sections:
+        type: array
+        items: { type: string }
+
+      # ── Sub-components ───────────────────────────────────────────────────────
+      sub_components:
+        type: array
+        items:
+          $ref: "#/$defs/SubComponentPlacement"
+
+      # ── Actions ─────────────────────────────────────────────────────────────
+      actions:
+        type: array
+        items:
+          oneOf:
+            - $ref: "#/$defs/Button"
+            - type: object
+              required: [button_ref]
+              additionalProperties: false
+              properties:
+                button_ref: { type: string, minLength: 1 }
+
+      # ── Persistence (from design_additions) ─────────────────────────────────
+      ui_persistence:
+        $ref: "#/$defs/UIPersistenceType"
+
+      # ── Choice rendering override (from design_additions) ───────────────────
+      choice_render:
+        $ref: "#/$defs/ChoiceRenderType"
+
+      # ── Specialised configs (from design_additions) ──────────────────────────
+      file_config:
+        $ref: "#/$defs/FileComponentConfig"
+        description: Required when type=FileGallery.
+      filter_config:
+        $ref: "#/$defs/FilterBuilderConfig"
+        description: Required when type=FilterBuilder.
+      avatar_config:
+        $ref: "#/$defs/AvatarConfig"
+        description: Required when type=Avatar.
+
+      # ── Schema rendering flags ───────────────────────────────────────────────
+      show_pro_fields:
+        type: boolean
+        default: false
+        description: Show schemata#Tag proField fields when true.
+      enable_branching:
+        type: boolean
+        default: true
+        description: Respect field-level branching / conditional visibility.
+      sectioned:
+        type: boolean
+        default: false
+        description: Group fields by schema-defined sections when true.
+      field_validation_hints:
+        type: boolean
+        default: true
+        description: Show pattern-hint icons derived from utils#Pattern.
+
+      # ── Layout & responsive ─────────────────────────────────────────────────
+      breakpoint_overrides:
+        type: object
+        additionalProperties:
+          type: object
+
+      # ── Auth-based visibility ────────────────────────────────────────────────
+      feature_ref:
+        type: string
+        description: >
+          UAM feature key. Component is hidden if auth.features does not
+          include this value.
+        maxLength: 80
+      hidden_condition:
+        $ref: "#/$defs/ConditionOrRef"
+      visible_access_levels:
+        type: array
+        description: AccessLevel values required to see this component.
+        items:
+          $ref: "#/$defs/AccessLevel"
+        uniqueItems: true
+
+      # ── Theme override ───────────────────────────────────────────────────────
+      theme_ref:
+        type: string
+        description: >
+          Key from manifest "themes". Scopes a sub-theme to this component
+          only (e.g. a dark-mode card inside a light-mode screen).
+        maxLength: 60
+
+      # ── Lifecycle, feedback, gestures, accessibility, analytics ────────────
+      lifecycle:          { $ref: "#/$defs/ComponentLifecycle" }
+      loading_state:      { $ref: "#/$defs/LoadingState" }
+      empty_state:
+        type: object
+        additionalProperties: false
+        properties:
+          text:       { type: string, maxLength: 300 }
+          icon_ref:   { type: string, maxLength: 80 }
+          action_ref: { type: string, maxLength: 80 }
+      error_state:
+        type: object
+        additionalProperties: false
+        properties:
+          text:             { type: string, maxLength: 300 }
+          icon_ref:         { type: string, maxLength: 80 }
+          retry_action_ref: { type: string, maxLength: 80 }
+      gestures:
+        type: array
+        items:
+          $ref: "#/$defs/GestureHandler"
+      accessibility:  { $ref: "#/$defs/AccessibilityProps" }
+      transition_in:  { type: string, maxLength: 80 }
+      transition_out: { type: string, maxLength: 80 }
+      analytics_id:   { type: string, maxLength: 80 }
+
+  FormEmbedConfig:
+    type: object
+    additionalProperties: false
+    description: >
+      Controls how an embedded form (form_ref) is rendered inside a component
+      of type=Form.
+    properties:
+      mode:
+        type: string
+        enum: [inline, modal, drawer, panel]
+        default: inline
+        description: >
+          inline  — form renders inside the component's content area.
+          modal   — form opens in a Dialog (uses dialogs registry).
+          drawer  — form opens in a side drawer.
+          panel   — form renders in a right-side split panel.
+      trigger_button_ref:
+        type: string
+        description: >
+          Key from manifest "buttons". Required when mode=modal/drawer/panel.
+          The button that triggers form opening.
+        maxLength: 80
+      pre_fill:
+        type: object
+        description: >
+          Maps form field IDs to expressions evaluated from the host component's
+          context. Pre-fills form fields when the form opens.
+          Supports {{context.*}}, {{auth.*}}, and {{record.*}} tokens.
+        additionalProperties:
+          type: string
+      on_submit_action_ref:
+        type: string
+        description: >
+          Key of a manifest action invoked after successful form submission.
+          Useful for refreshing the host component's data binding.
+        maxLength: 80
+      submit_label_override:
+        type: string
+        description: Overrides the embedded form's submit_label.
+        maxLength: 50
+
+  SubComponentPlacement:
+    type: object
+    additionalProperties: false
+    required: [component_ref, direction]
+    properties:
+      component_ref:    { type: string, minLength: 1 }
+      direction:        { $ref: "#/$defs/LayoutDirection" }
+      breakpoint:       { type: string, maxLength: 40 }
+      hidden_condition: { $ref: "#/$defs/ConditionOrRef" }
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  UI LAYER — Screen                                                       ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  Screen:
+    type: object
+    additionalProperties: false
+    required: [name]
+    properties:
+      name:                 { type: string, minLength: 1, maxLength: 80 }
+      label:                { type: string, maxLength: 120 }
+      icon_ref:             { type: string, maxLength: 80 }
+      icon_path:            { type: string, maxLength: 300 }
+      is_home:              { type: boolean, default: false }
+      nav_order:            { type: integer, minimum: 0 }
+      components:
+        type: array
+        items:
+          $ref: "#/$defs/SubComponentPlacement"
+      secondary_screens:
+        type: array
+        items:
+          $ref: "#/$defs/SecondaryScreenLink"
+
+      # ── Auth-based access ────────────────────────────────────────────────────
+      feature_ref:
+        type: string
+        description: >
+          UAM feature key. Screen is hidden and route is blocked if
+          auth.features does not include this value.
+        maxLength: 80
+      allowed_role_categories:
+        type: array
+        description: >
+          Role categories permitted to view this screen. An empty list allows
+          all categories.
+        items:
+          $ref: "#/$defs/RoleCategory"
+        uniqueItems: true
+      auth_rules:
+        $ref: "#/$defs/ScreenAuthRules"
+
+      # ── Appearance ───────────────────────────────────────────────────────────
+      background_color:     { type: string, pattern: "^[A-Fa-f0-9]{6}$" }
+      background_pic_path:  { type: string, maxLength: 300 }
+      theme_ref:
+        type: string
+        description: >
+          Key from manifest "themes". Overrides the active_theme for this
+          screen only.
+        maxLength: 60
+
+      # ── Lifecycle ────────────────────────────────────────────────────────────
+      on_enter:  { type: string, maxLength: 80 }
+      on_exit:   { type: string, maxLength: 80 }
+      on_back:   { type: string, maxLength: 80 }
+      transition_in:  { type: string, maxLength: 80 }
+      transition_out: { type: string, maxLength: 80 }
+
+      # ── Status bar ───────────────────────────────────────────────────────────
+      status_bar:
+        type: object
+        additionalProperties: false
+        properties:
+          style:            { type: string, enum: [light, dark, auto], default: auto }
+          background_color: { type: string, pattern: "^[A-Fa-f0-9]{6}$" }
+
+      analytics_id: { type: string, maxLength: 80 }
+
+  ScreenAuthRules:
+    type: object
+    additionalProperties: false
+    description: >
+      Consolidated auth-based rendering rules for a screen. These are applied
+      after feature_ref and allowed_role_categories checks.
+    properties:
+      require_auth:
+        type: boolean
+        default: true
+        description: When false, the screen is accessible without a resolved auth context.
+      require_access_levels:
+        type: array
+        description: At least one of these AccessLevel values must be present.
+        items:
+          $ref: "#/$defs/AccessLevel"
+        uniqueItems: true
+      require_permissions:
+        type: array
+        description: >
+          uam#Permission names that must ALL be present in auth for this
+          screen to be shown.
+        items:
+          type: string
+          minLength: 1
+        uniqueItems: true
+      redirect_on_denied:
+        type: string
+        description: Screen key to navigate to when access is denied.
+        minLength: 1
+      denied_toast_ref:
+        type: string
+        description: Key from manifest "toasts" to show when access is denied.
+        maxLength: 80
+
+  SecondaryScreenLink:
+    type: object
+    additionalProperties: false
+    required: [screen_ref, access_type]
+    properties:
+      screen_ref:       { type: string, minLength: 1 }
+      access_type:      { $ref: "#/$defs/ScreenAccessType" }
+      menu_label:       { type: string, maxLength: 80 }
+      menu_order:       { type: integer, minimum: 0 }
+      hidden_condition: { $ref: "#/$defs/ConditionOrRef" }
+      params:           { type: object, additionalProperties: { type: string } }
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  UI LAYER — DataBinding, Lifecycle, Transitions, Gestures, Overlays     ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  DataBinding:
+    type: object
+    additionalProperties: false
+    properties:
+      source_ref:
+        type: string
+        description: Key of a manifest data_sources entry.
+        minLength: 1
+      query_params:
+        type: object
+        additionalProperties: { type: string }
+      write_action_ref:  { type: string, maxLength: 80 }
+      delete_action_ref: { type: string, maxLength: 80 }
+      pagination:
+        type: object
+        additionalProperties: false
+        properties:
+          type:        { type: string, enum: [cursor, page_number, offset, none], default: none }
+          page_size:   { type: integer, minimum: 1, default: 20 }
+          page_param:  { type: string, default: page }
+          size_param:  { type: string, default: per_page }
+      sort:
+        type: object
+        additionalProperties: false
+        properties:
+          field:     { type: string }
+          direction: { type: string, enum: [asc, desc], default: asc }
+      polling_interval_ms:  { type: [integer, "null"], minimum: 0 }
+      optimistic_updates:   { type: boolean, default: false }
+
+  ComponentLifecycle:
+    type: object
+    additionalProperties: false
+    properties:
+      on_mount:       { type: string, maxLength: 80 }
+      on_unmount:     { type: string, maxLength: 80 }
+      on_focus:       { type: string, maxLength: 80 }
+      on_blur:        { type: string, maxLength: 80 }
+      on_data_load:   { type: string, maxLength: 80 }
+      on_data_error:  { type: string, maxLength: 80 }
+      on_refresh:     { type: string, maxLength: 80 }
+
+  Transition:
+    type: object
+    additionalProperties: false
+    required: [type]
+    properties:
+      type:
+        type: string
+        enum: [fade, slide_left, slide_right, slide_up, slide_down,
+               scale, flip, shared_element, custom]
+      duration_ms:        { type: integer, minimum: 0, default: 250 }
+      easing:             { type: string, maxLength: 100 }
+      delay_ms:           { type: integer, minimum: 0, default: 0 }
+      custom_handler:     { type: string, maxLength: 80 }
+      shared_element_tag: { type: string, maxLength: 80 }
+
+  GestureHandler:
+    type: object
+    additionalProperties: false
+    required: [gesture, action_ref]
+    properties:
+      gesture:
+        type: string
+        enum: [tap, double_tap, long_press, swipe_left, swipe_right,
+               swipe_up, swipe_down, pinch, spread, rotate]
+      action_ref:         { type: string, minLength: 1 }
+      condition:          { $ref: "#/$defs/ConditionOrRef" }
+      min_distance_px:    { type: integer, minimum: 0 }
+      long_press_duration_ms: { type: integer, minimum: 0, default: 500 }
+
+  LoadingState:
+    type: object
+    additionalProperties: false
+    properties:
+      style:
+        type: string
+        enum: [spinner, skeleton, shimmer, progress_bar, overlay, none]
+        default: skeleton
+      skeleton_rows:      { type: integer, minimum: 1, maximum: 20, default: 3 }
+      overlay_opacity:    { type: number, minimum: 0, maximum: 1, default: 0.6 }
+      min_display_ms:     { type: integer, minimum: 0, default: 400 }
+
+  Toast:
+    type: object
+    additionalProperties: false
+    required: [message]
+    properties:
+      message:     { type: string, maxLength: 300 }
+      severity:    { type: string, enum: [info, success, warning, error], default: info }
+      duration_ms: { type: integer, minimum: 0, default: 3000 }
+      position:
+        type: string
+        enum: [top, top_left, top_right, bottom, bottom_left, bottom_right]
+        default: bottom
+      action_label: { type: string, maxLength: 40 }
+      action_ref:   { type: string, maxLength: 80 }
+      icon_ref:     { type: string, maxLength: 80 }
+
+  Dialog:
+    type: object
+    additionalProperties: false
+    required: [title]
+    properties:
+      title:            { type: string, maxLength: 120 }
+      body:             { type: string, maxLength: 2000 }
+      icon_ref:         { type: string, maxLength: 80 }
+      severity:         { type: string, enum: [info, success, warning, error, neutral], default: neutral }
+      dismissible:      { type: boolean, default: true }
+      primary_action:   { $ref: "#/$defs/Button" }
+      secondary_action: { $ref: "#/$defs/Button" }
+      component_ref:    { type: string, maxLength: 80 }
+      max_width_px:     { type: integer, minimum: 200, default: 480 }
+
+  AccessibilityProps:
+    type: object
+    additionalProperties: false
+    properties:
+      label:               { type: string, maxLength: 200 }
+      hint:                { type: string, maxLength: 300 }
+      role:
+        type: string
+        enum: [button, link, heading, image, list, listitem, checkbox, radio,
+               switch, slider, tab, tabpanel, dialog, alert, status, none]
+      live_region:         { type: string, enum: [off, polite, assertive], default: off }
+      keyboard_shortcut:   { type: string, maxLength: 20 }
+      focus_order:         { type: integer, minimum: 0 }
+      min_touch_target_px: { type: integer, minimum: 0, default: 44 }
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  DESIGN ADDITIONS — Widget Map & Choice Render                           ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  WidgetMap:
+    type: object
+    additionalProperties: false
+    description: >
+      Maps schemata#DataType values to default widget component names.
+      All keys can be overridden per-component via field_widget_overrides.
+    properties:
+      enum:         { type: string, default: EnumFormField }
+      choice:       { type: string, default: ChoiceFormField }
+      string:       { type: string, default: TextFormField }
+      multiLineText: { type: string, default: MultiLineTextFormField }
+      number:       { type: string, default: NumberFormField }
+      boolean:      { type: string, default: TristateCheckboxFormField }
+      date:         { type: string, default: DatePickerFormField }
+      any:          { type: string, default: AnyFormField }
+      id:           { type: string, default: TextFormField }
+      secret:       { type: string, default: PasswordFormField }
+      reference:    { type: string, default: SearchPickerFormField }
+
+  UIPersistenceType:
+    type: string
+    description: >
+      Controls when and how a component's fetched data is cached.
+        LRU          — least-recently-used in-memory cache (default for Sets).
+        Session      — browser/app session scope; cleared on close.
+        Profile      — persisted to the user's profile store across sessions.
+        AppFirstLoad — loaded once at app initialisation; read-only thereafter.
+        InApp        — in-memory for the lifetime of the component mount only.
+    enum: [LRU, Session, Profile, AppFirstLoad, InApp]
+
+  ChoiceRenderType:
+    type: string
+    description: >
+      How a choice / enum field renders its options inside a component.
+        radio    — radio button group.
+        checkbox — checkbox group.
+        dropDown — dropdown select.
+        autoFill — type-to-search autocomplete combobox.
+        pick     — modal / drawer picker (for large option sets).
+    enum: [radio, checkbox, dropDown, autoFill, pick]
+
+  SectionBreakType:
+    type: string
+    enum: [start, end, break, continue]
+
+  SchemaTagType:
+    type: string
+    enum: [uiOnly, sectioned, proField, allowOthers, linkedField,
+           radio, checkbox, dropDown, autoFill, pick, switch, csv]
+
+  FileComponentConfig:
+    type: object
+    additionalProperties: false
+    properties:
+      allow_pictures:      { type: boolean, default: true }
+      allow_files:         { type: boolean, default: true }
+      allowed_file_types:  { type: array, items: { type: string } }
+      max_file_size_mb:    { type: number, minimum: 0, default: 20 }
+      upload_enabled:      { type: boolean, default: false }
+      delete_enabled:      { type: boolean, default: false }
+      download_enabled:    { type: boolean, default: true }
+      thumbnail_size:      { type: string, enum: [small, medium, large], default: medium }
+      layout:              { type: string, enum: [grid, list], default: grid }
+      category_filter:     { type: boolean, default: false }
+      tag_filter:          { type: boolean, default: false }
+
+  FilterBuilderConfig:
+    type: object
+    additionalProperties: false
+    properties:
+      filterable_fields:
+        type: array
+        items: { type: string }
+        uniqueItems: true
+      allowed_operators:
+        type: array
+        items:
+          type: string
+          enum: [and, or, not, equals, unequals, "is", "is not",
+                 "greater than", "less than",
+                 "greater than or equal to", "less than or equal to",
+                 "in", "not in", exists, be]
+        uniqueItems: true
+      max_conditions:  { type: integer, minimum: 1, default: 10 }
+      allow_nesting:   { type: boolean, default: false }
+      output_action_ref: { type: string, maxLength: 80 }
+      preset_filters:
+        type: array
+        items:
+          type: object
+          required: [label, expression]
+          additionalProperties: false
+          properties:
+            label:      { type: string, maxLength: 60 }
+            expression: { type: string, maxLength: 500 }
+
+  AvatarConfig:
+    type: object
+    additionalProperties: false
+    properties:
+      show_photo:           { type: boolean, default: true }
+      show_nick_name:       { type: boolean, default: true }
+      fallback_style:       { type: string, enum: [initials, icon, placeholder], default: initials }
+      fallback_icon_ref:    { type: string, maxLength: 80 }
+      size:                 { type: string, enum: [xs, sm, md, lg, xl], default: md }
+      shape:                { type: string, enum: [circle, rounded, square], default: circle }
+      show_online_indicator: { type: boolean, default: false }
+
+  RolePreferenceOverride:
+    type: object
+    additionalProperties: false
+    description: >
+      UI preference overrides applied to all users whose active uam#Role
+      matches the key in the manifest "role_preferences" map.
+    properties:
+      theme_extends:
+        type: string
+        description: Key of a theme from the manifest "themes" map to layer on top.
+        maxLength: 60
+      default_locale:    { type: string, maxLength: 20 }
+      default_currency:  { type: string, maxLength: 3 }
+      hidden_screens:
+        type: array
+        items: { type: string }
+        uniqueItems: true
+      hidden_components:
+        type: array
+        items: { type: string }
+        uniqueItems: true
+      column_visibility:
+        type: object
+        additionalProperties:
+          type: array
+          items: { type: string }
+      show_pro_fields: { type: boolean }
+      items_per_page:  { type: integer, minimum: 1 }
+      date_format:     { type: string, maxLength: 20 }
+      active_features:
+        type: array
+        description: >
+          Additional feature keys to activate for this role beyond those
+          granted by uam (for local feature-flag overrides in development).
+        items: { type: string }
+        uniqueItems: true
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  THEMES  (new — full named registry)                                     ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  ThemeDefinition:
+    type: object
+    additionalProperties: false
+    description: >
+      A complete named theme definition. Themes follow a layered model:
+        1. Base theme     (ThemeDefinition.extends → named theme or runtime built-in)
+        2. This theme     (tokens defined here override the base)
+        3. Role override  (role_preferences[role].theme_extends → another ThemeDefinition key)
+        4. Component scope (component.theme_ref → further scoped override)
+        5. Dark mode      (dark_mode token map applied when OS/app is in dark mode)
+
+      Token keys should use kebab-case CSS custom property naming
+      (e.g. "--color-primary", "--spacing-md") but the prefix and separator
+      are up to the runtime adapter.
+    properties:
+
+      label:
+        type: string
+        description: Human-readable display name shown in theme switcher UI.
+        maxLength: 80
+
+      extends:
+        type: string
+        description: >
+          Key of a base theme to layer this theme on top of.
+          Accepts manifest theme keys or built-in names:
+            default | material | ios-hig | fluent
+        maxLength: 60
+
+      colors:
+        type: object
+        description: Semantic colour tokens (hex #RRGGBB[AA] or CSS colour string).
+        additionalProperties:
+          type: string
+        examples:
+          - primary:        "#006FFD"
+            primary_light:  "#5B9EF4"
+            primary_dark:   "#0047CC"
+            surface:        "#FFFFFF"
+            surface_variant: "#F5F5F5"
+            on_surface:     "#1A1A2E"
+            outline:        "#C7C7D0"
+            error:          "#BA1A1A"
+            on_error:       "#FFFFFF"
+            warning:        "#FF8C00"
+            success:        "#1B8A5A"
+
+      typography:
+        type: object
+        additionalProperties: false
+        properties:
+          font_family_default: { type: string, maxLength: 120 }
+          font_family_mono:    { type: string, maxLength: 120 }
+          scale:
+            type: object
+            description: >
+              Named text-size tokens (px or rem string). Keys become
+              textSize preset values (e.g. textSize: body_md).
+            additionalProperties:
+              type: [string, number]
+
+      spacing:
+        type: object
+        description: Spacing scale tokens (px or rem).
+        additionalProperties:
+          type: [string, number]
+
+      radius:
+        type: object
+        description: Border-radius tokens (px or rem).
+        additionalProperties:
+          type: [string, number]
+
+      elevation:
+        type: object
+        description: Shadow / elevation tokens (CSS box-shadow strings).
+        additionalProperties:
+          type: string
+
+      motion:
+        type: object
+        additionalProperties: false
+        description: Motion / animation baseline tokens.
+        properties:
+          duration_fast_ms:     { type: integer, minimum: 0, default: 100 }
+          duration_standard_ms: { type: integer, minimum: 0, default: 250 }
+          duration_slow_ms:     { type: integer, minimum: 0, default: 400 }
+          easing_standard:      { type: string, default: "cubic-bezier(0.4, 0, 0.2, 1)" }
+          easing_decelerate:    { type: string, default: "cubic-bezier(0, 0, 0.2, 1)" }
+          easing_accelerate:    { type: string, default: "cubic-bezier(0.4, 0, 1, 1)" }
+          reduced_motion:
+            type: boolean
+            default: false
+            description: >
+              When true, all transitions are replaced with instant cuts to
+              respect prefers-reduced-motion accessibility settings.
+
+      dark_mode:
+        type: object
+        description: >
+          Colour token overrides applied when the OS / app is in dark mode.
+          Keys must match tokens in the "colors" map of this theme or its base.
+        additionalProperties:
+          type: string
+
+      # Theme selector metadata
+      selectable:
+        type: boolean
+        default: true
+        description: >
+          When true, this theme appears in the user-facing theme switcher UI
+          (if the app exposes one). Set false for role-only or internal themes.
+
+      preview_color:
+        type: string
+        description: >
+          Hex colour used to represent this theme in a visual picker
+          (e.g. the primary brand colour swatch). 6-digit hex without #.
+        pattern: "^[A-Fa-f0-9]{6}$"
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  TEMPLATES  (new)                                                        ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  TemplateRegistry:
+    type: object
+    additionalProperties: false
+    description: >
+      Registry of reusable parametrized blueprints. Templates are not
+      rendered directly — they must be instantiated by referencing them
+      with a "template_ref" property alongside a "variables" map.
+
+      Instantiation substitutes {{variable_name}} tokens throughout the
+      copied definition. The resulting definition is merged with any inline
+      overrides provided at the instantiation site.
+    properties:
+      screen_templates:
+        type: object
+        description: Named screen templates.
+        additionalProperties:
+          $ref: "#/$defs/ScreenTemplate"
+      component_templates:
+        type: object
+        description: Named component templates.
+        additionalProperties:
+          $ref: "#/$defs/ComponentTemplate"
+      form_templates:
+        type: object
+        description: Named form templates.
+        additionalProperties:
+          $ref: "#/$defs/FormTemplate"
+
+  TemplateVariable:
+    type: object
+    additionalProperties: false
+    required: [name, type]
+    description: >
+      A variable declaration in a template. Variables are substituted via
+      {{variable_name}} tokens in the template body.
+    properties:
+      name:
+        type: string
+        pattern: "^[a-z][a-z0-9_]*$"
+        maxLength: 60
+        description: Variable name used in {{name}} tokens.
+      type:
+        type: string
+        enum: [string, boolean, number, screen_ref, component_ref,
+               form_ref, schema_ref, feature_ref, icon_ref,
+               data_source_ref, action_ref]
+        description: Expected value type. screen_ref/component_ref/form_ref values
+          are validated against the manifest registry at instantiation time.
+      required:
+        type: boolean
+        default: true
+      default: {}
+      description:
+        type: string
+        maxLength: 300
+
+  ScreenTemplate:
+    type: object
+    additionalProperties: false
+    required: [variables, screen]
+    description: >
+      A parametrized Screen definition. Instantiate in the manifest "screens"
+      map by setting screen.template_ref + screen.variables.
+
+      Example use case — CRUD screen template:
+        variables: [entity_name, list_component_ref, detail_component_ref,
+                    create_form_ref, feature_ref]
+        Instantiate as "orders_screen" with entity_name="Order",
+        list_component_ref="orders_table", etc.
+    properties:
+      label:
+        type: string
+        maxLength: 120
+        description: Human-readable template name shown in design tools.
+      description:
+        type: string
+        maxLength: 1000
+      variables:
+        type: array
+        minItems: 1
+        items:
+          $ref: "#/$defs/TemplateVariable"
+      screen:
+        $ref: "#/$defs/Screen"
+        description: >
+          The template body. {{variable_name}} tokens in any string value
+          are replaced at instantiation time.
+      tags:
+        type: object
+        additionalProperties:
+          type: string
+
+  ComponentTemplate:
+    type: object
+    additionalProperties: false
+    required: [variables, component]
+    description: >
+      A parametrized Component definition. Instantiate by setting
+      component.template_ref + component.variables anywhere a Component
+      is expected.
+
+      Example use case — summary card template:
+        variables: [title, schema_ref, fields, primary_action_ref]
+    properties:
+      label:       { type: string, maxLength: 120 }
+      description: { type: string, maxLength: 1000 }
+      variables:
+        type: array
+        minItems: 1
+        items:
+          $ref: "#/$defs/TemplateVariable"
+      component:
+        $ref: "#/$defs/Component"
+      tags:
+        type: object
+        additionalProperties:
+          type: string
+
+  FormTemplate:
+    type: object
+    additionalProperties: false
+    required: [variables, form]
+    description: >
+      A parametrized Form definition. Instantiate in the manifest "forms"
+      map by setting form.template_ref + form.variables.
+
+      Example use case — wizard template:
+        variables: [title, model_ref, submit_endpoint, feature_ref]
+      Instantiate as "create_order_form" and "edit_order_form" from the
+      same template with different submit endpoints and feature gates.
+    properties:
+      label:       { type: string, maxLength: 120 }
+      description: { type: string, maxLength: 1000 }
+      variables:
+        type: array
+        minItems: 1
+        items:
+          $ref: "#/$defs/TemplateVariable"
+      form:
+        $ref: "#/$defs/Form"
+      tags:
+        type: object
+        additionalProperties:
+          type: string
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  SCALAR ENUMS  (authoritative — no mirrors needed)                       ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  ConfidentialityType:
+    type: string
+    enum: [Public, Internal, Confidential, Restricted, Secret]
+    description: >
+      Public      — visible to all authenticated users.
+      Internal    — internal staff only.
+      Confidential — owning team / role only.
+      Restricted  — named individuals only.
+      Secret      — system processes only; never rendered in UI.
+
+  EditabilityType:
+    type: string
+    enum: [Mutable, MutableIfNull, Immutable, Generated]
+
+  NumberType:
+    type: string
+    enum: [int, long, float, double, decimal2, decimal4, decimal6, NPS]
+
+  FormState:
+    type: string
+    enum: [draft, active, deprecated, archived]
+
+  GroupType:
+    type: string
+    enum: [OneOf, AnyOf, AllOf, Index]
+
+  RenderMode:
+    type: string
+    enum: [inline, modal, panel]
+    default: inline
+
+  UIPersistenceDuration:
+    type: string
+    description: >
+      Named duration units used in schedule indicators and cache TTLs.
+        Day   =  86 400 000 ms
+        Week  = 604 800 000 ms
+        Month = 2 592 000 000 ms
+        Year  = 31 536 000 000 ms
+    enum: [Day, Week, Month, Year, Decade]
+
+  # ╔══════════════════════════════════════════════════════════════════════════╗
+  # ║  PRIMITIVES                                                              ║
+  # ╚══════════════════════════════════════════════════════════════════════════╝
+  FormulaDefault:
+    type: object
+    required: [expression]
+    additionalProperties: false
+    properties:
+      expression:
+        type: string
+        minLength: 1
+        maxLength: 500
+        description: "Examples: now(), today(), context.userId, fields.quantity * 1.1"
+      operator:   { type: string, maxLength: 40 }
+      values:
+        type: array
+        items: { type: string }
+        maxItems: 20
+      parameters:
+        type: array
+        items: { type: string }
+        maxItems: 20
+
+  DateExpression:
+    type: string
+    description: >
+      ISO 8601 date (YYYY-MM-DD) or relative expression:
+        today, today+7d, today-18y, today+6m
+      Units: d=days, m=months, y=years.
+    pattern: "^(\\d{4}-\\d{2}-\\d{2}|today([+-]\\d+[dmy])?)$"
+
+  HHmm:
+    type: string
+    description: 24-hour time in HH:mm format.
+    pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
+    examples:
+      - "09:00"
+      - "17:30"
