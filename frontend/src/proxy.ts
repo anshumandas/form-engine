@@ -1,11 +1,11 @@
 /**
- * Next.js Edge Middleware — auth gate
+ * Next.js Edge Proxy — auth gate
  *
  * Runs before every matched request and checks for the presence of the
  * `auth-token` cookie. If it is missing the user is redirected to /auth.
  *
  * WHY we no longer verify the token against the backend here:
- *   Edge middleware runs in a V8 isolate that cannot reach loopback addresses
+ *   Edge proxy runs in a V8 isolate that cannot reach loopback addresses
  *   (127.0.0.1 / localhost). Any fetch() to the FastAPI backend throws, lands
  *   in the catch block, and the request is let through — making the guard a
  *   no-op. Token validity is instead enforced naturally: every authenticated
@@ -28,7 +28,7 @@ const PUBLIC_PREFIXES = [
   "/favicon",
 ];
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Allow public paths through unconditionally

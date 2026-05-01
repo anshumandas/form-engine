@@ -47,7 +47,7 @@ export function FormEngine({
     // re-initialising on every parent render would reset in-progress answers.
     // If callers need to change initialAnswers, they should also change formId.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [manifest.manifest_id, formId]);
+  }, [manifest?.manifest_id, formId]);
 
   // Clear the error banner whenever the user switches form
   useEffect(() => { setSubmitError(null); }, [formId]);

@@ -184,6 +184,42 @@ export const api = {
     request(`/api/submissions/drafts/${manifestId}/${formId}`, { method: "DELETE" }),
 };
 
+// ─── UI Manifest API ──────────────────────────────────────────────────────────
+
+export interface UIManifestSummary {
+  manifest_id: string;
+  manifest_version: string;
+  description?: string;
+  screens: Array<{
+    screen_id: string;
+    label: string;
+    nav_order?: number;
+    theme_ref?: string;
+    auth_required?: boolean;
+    component_count: number;
+  }>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export const uiApi = {
+  /** List all UI manifests registered in the repository. */
+  listManifests: (): Promise<UIManifestSummary[]> =>
+    request("/api/ui/"),
+
+  /** Fetch a full UISystemManifest by id. */
+  getManifest: (manifestId: string): Promise<Record<string, unknown>> =>
+    request(`/api/ui/${manifestId}`),
+
+  /** Upsert a UI manifest. */
+  upsertManifest: (manifest: Record<string, unknown>): Promise<{ manifest_id: string; status: string }> =>
+    request("/api/ui/", { method: "POST", body: JSON.stringify(manifest) }),
+
+  /** Delete a UI manifest. */
+  deleteManifest: (manifestId: string): Promise<void> =>
+    request(`/api/ui/${manifestId}`, { method: "DELETE" }),
+};
+
 // ─── Admin API ────────────────────────────────────────────────────────────────
 
 export interface AdminUser {

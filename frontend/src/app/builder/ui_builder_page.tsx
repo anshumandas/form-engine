@@ -4,9 +4,10 @@ import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/api";
-import { VisualUIBuilder, type UISystemManifest } from "@/components/UIBuilder/VisualUIBuilder";
+import { VisualUIBuilder} from "@/components/UIBuilder/VisualUIBuilder";
 import { toast } from "sonner";
 import { cn } from "@form-engine/libs/utils";
+import { ComponentType, LayoutDirection, UISystemManifest } from "@form-engine/components/UIEngine";
 
 // ─── Starter manifest ─────────────────────────────────────────────────────────
 
@@ -24,7 +25,7 @@ const STARTER_MANIFEST: UISystemManifest = {
       label: "Home",
       is_home: true,
       nav_order: 0,
-      components: [{ component_ref: "main_content", direction: "Center" }],
+      components: [{ component_ref: "main_content", direction: LayoutDirection.Center }],
       auth_rules: { require_auth: false },
     },
   },
@@ -32,7 +33,7 @@ const STARTER_MANIFEST: UISystemManifest = {
     main_content: {
       name: "main_content",
       label: "Main Content",
-      type: "Card",
+      type: ComponentType.Card,
       text: "Welcome to the app",
     },
   },

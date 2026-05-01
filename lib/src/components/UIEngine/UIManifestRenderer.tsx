@@ -3,40 +3,35 @@
 /**
  * UIManifestRenderer
  *
- * Runtime renderer for UISystemManifest. Given a parsed manifest and a screen
- * key, it boots a UIEngineProvider, resolves the screen's component placements,
- * and passes them to UIEngine's own ScreenLayout — so theming, feature-gating,
- * auth-level filtering, and condition evaluation all work identically to any
- * other UIEngine-powered view.
+ * PATCHED — two new optional props over the original:
  *
- * FIXED vs. original UIBuilder/UIManifestRenderer.tsx
- *  1. Types imported from UIEngine — removes circular dep on VisualUIBuilder.
- *  2. Wrapped with UIEngineProvider so all engine hooks resolve correctly.
- *  3. Uses UIEngine's ScreenLayout + SubComponentPlacementRenderer instead of
- *     the hand-rolled groupByDirection + ComponentRenderer copy.
- *  4. FormManifest is no longer assembled inline — ComponentRenderer already
- *     holds the full manifest reference and passes it to FormEngine.
+ *  customComponents
+ *    Registry of React implementations for `type: Custom` manifest components.
+ *    Keyed by `component.name`. Each implementation receives:
+ *      { context, handlers, children }
+ *    where `children` are the engine-resolved sub_components (if any are declared
+ *    on the component in the manifest).
  *
- * USAGE
- *   <UIManifestRenderer manifest={parsedYaml} screenKey="home" handlers={…} />
+ *  context
+ *    Arbitrary runtime key-value pairs made available to:
+ *      - hidden_condition string expressions (e.g. "context.mode !== 'signin'")
+ *      - Custom component implementations via their `context` prop
+ *    This is passed to UIEngineProvider as `engineContext` (renamed internally to
+ *    avoid collision with React's own "context" naming).
  *
- * LOWER-LEVEL USAGE (inside an existing UIEngineProvider)
- *   const screen = manifest.screens?.["home"];
- *   <ScreenLayout componentPlacements={screen?.components ?? []} />
+ * All existing call-sites that omit both new props continue to work unchanged.
  */
 
 import React, { useMemo } from "react";
 
-// ── UIEngine — single source of truth for all UI types & rendering ─────────────
 import {
   UIEngineProvider,
   ScreenLayout,
   UIEngineHandlers,
 } from "./index";
+import type { CustomComponentRegistry } from "./context";
 import type { UISystemManifest, SubComponentPlacement } from "./types";
-
-// ── FormEngine handler signature (for external callers) ───────────────────────
-import type { FieldAnswers } from "@form-engine/libs/types";
+import type { FieldAnswers } from "../../libs/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public API
@@ -45,7 +40,7 @@ import type { FieldAnswers } from "@form-engine/libs/types";
 /** Map of action-key → handler invoked by FormEngine on_submit / Button on_press */
 export type ActionHandlerMap = Record<
   string,
-  (answers?: FieldAnswers) => Promise<void> | void
+  (answers: FieldAnswers) => Promise<void> | void
 >;
 
 interface UIManifestRendererProps {
@@ -60,6 +55,28 @@ interface UIManifestRendererProps {
    *  - ActionDef `handler` field
    */
   handlers?: ActionHandlerMap;
+  /**
+   * Registry mapping Custom component names to React implementations.
+   * Each implementation receives { context, handlers, children } where children
+   * are the engine-resolved sub_components declared on the manifest component.
+   *
+   * Example:
+   *   customComponents={{
+   *     background_grid: BackgroundGrid,
+   *     auth_card: AuthCardWrapper,
+   *   }}
+   */
+  customComponents?: CustomComponentRegistry;
+  /**
+   * Runtime context values injected into:
+   *  - hidden_condition string expressions via the `context` variable
+   *    (e.g. `"context.mode !== 'signin'"` on a sub_component placement)
+   *  - Custom component implementations via their `context` prop
+   *
+   * Example:
+   *   context={{ mode: "signin" }}
+   */
+  context?: Record<string, unknown>;
   /** Extra CSS class on the outermost div */
   className?: string;
 }
@@ -72,14 +89,15 @@ interface UIManifestRendererProps {
  * Renders a single screen from a UISystemManifest.
  *
  * Self-contained: boots its own UIEngineProvider so it can be dropped into any
- * React tree without an ancestor engine context. If you already have an
- * ancestor UIEngineProvider (e.g. in a full app shell), use ScreenLayout
- * directly and pass screen.components as componentPlacements.
+ * React tree without an ancestor engine context. If you already have an ancestor
+ * UIEngineProvider, use ScreenLayout directly.
  */
 export function UIManifestRenderer({
   manifest,
   screenKey,
   handlers = {},
+  customComponents,
+  context,
   className,
 }: UIManifestRendererProps) {
   const screen = manifest.screens?.[screenKey];
@@ -100,13 +118,19 @@ export function UIManifestRenderer({
           async (ctx: unknown) => fn(ctx as FieldAnswers),
         ])
       ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [handlers]
   );
 
   const placements: SubComponentPlacement[] = screen.components ?? [];
 
   return (
-    <UIEngineProvider manifest={manifest} handlers={engineHandlers}>
+    <UIEngineProvider
+      manifest={manifest}
+      handlers={engineHandlers}
+      customComponents={customComponents}
+      engineContext={context}
+    >
       <div
         className={className}
         style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}
@@ -114,9 +138,11 @@ export function UIManifestRenderer({
         {/*
          * ScreenLayout renders the full direction-based layout:
          *   Modal / Top / Left / Center / Right / Floating / Bottom
-         * Each placement is handled by SubComponentPlacementRenderer →
-         * ComponentRenderer, which covers all ComponentTypes including
-         * Form (delegated to FormEngine), Table, Card, Tree, Avatar, etc.
+         *
+         * Each placement → SubComponentPlacementRenderer → ComponentRenderer.
+         * ComponentRenderer dispatches Custom types to CustomRenderer, which
+         * resolves the registered implementation and passes engine-walked
+         * sub_components as children.
          */}
         <ScreenLayout componentPlacements={placements} />
       </div>

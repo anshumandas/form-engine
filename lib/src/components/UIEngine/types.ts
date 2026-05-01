@@ -12,6 +12,8 @@
  *   Templates — parametrized reusable screen / component / form templates
  */
 
+import { FormDef, FormManifest } from "../../libs/types";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ENUMS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -122,15 +124,15 @@ export interface ResolvedAuth {
 export interface ThemeDefinition {
   label?: string;
   extends?: string;
-  colors: Record<string, string>;
-  typography: {
+  colors?: Record<string, string>;
+  typography?: {
     font_family_default?: string;
     font_family_mono?: string;
     scale: Record<string, string | number>;
   };
-  spacing: Record<string, string | number>;
-  radius: Record<string, string | number>;
-  elevation: Record<string, string>;
+  spacing?: Record<string, string | number>;
+  radius?: Record<string, string | number>;
+  elevation?: Record<string, string>;
   motion?: {
     duration_fast_ms?: number;
     duration_standard_ms?: number;
@@ -273,8 +275,12 @@ export interface Button {
   icon_path?: string;
   background_pic_path?: string;
   text_size?: number | string;
+  /** Text / icon colour. */
   foreground_color?: string;
+  /** Background fill. */
   background_color?: string;
+  /** Border colour. Renders only when set. */
+  border_color?: string;
   disabled_condition?: ConditionOrRef;
   hidden_condition?: ConditionOrRef;
   accessibility?: AccessibilityProps;
@@ -526,6 +532,19 @@ export interface SubComponentPlacement {
   direction: LayoutDirection;
   breakpoint?: string;
   hidden_condition?: ConditionOrRef;
+  /**
+   * Flex-weight for Left / Right panels.
+   * Controls how the horizontal space is divided between panels when no Center
+   * content is present. A Left with span=2 and a Right with span=1 (default)
+   * gives a 2 : 1 split — hero takes two-thirds, auth card takes one-third.
+   *
+   * On portrait / narrow screens (< 768 px wide OR height > width) the layout
+   * switches to a vertical stack and span is ignored; each panel fills 100 %
+   * of the viewport width.
+   *
+   * @default 1
+   */
+  span?: number;
 }
 
 export interface Component {
@@ -543,8 +562,53 @@ export interface Component {
   // Display
   text?: string;
   text_size?: number | string;
-  foreground_color?: string;
+
+  /**
+   * COLOR OVERRIDES
+   * ───────────────
+   * All color fields accept:
+   *   - CSS named colors  → "white", "transparent", "crimson"
+   *   - Pre-hashed hex    → "#6366f1", "#fff"
+   *   - Bare hex digits   → "6366f1"   (# is added automatically)
+   *   - Any CSS color fn  → "rgb(99,102,241)", "hsl(239,84%,67%)"
+   *
+   * When set, these override the corresponding value that would otherwise come
+   * from the active theme, scoped to this component only.
+   */
+
+  /** Background of the component container (card / wrapper div). */
   background_color?: string;
+
+  /** Text / icon colour for the component container and its label. */
+  foreground_color?: string;
+
+  /** Border colour of the component container. Renders only when set. */
+  border_color?: string;
+
+  /**
+   * Background fill applied to every <input>, <select>, and <textarea>
+   * rendered inside this component.
+   */
+  input_background_color?: string;
+
+  /**
+   * Text colour applied to every <input>, <select>, and <textarea>
+   * rendered inside this component.
+   */
+  input_text_color?: string;
+
+  /**
+   * Border colour applied to every <input>, <select>, and <textarea>
+   * rendered inside this component.
+   */
+  input_border_color?: string;
+
+  /**
+   * Text colour used specifically for form-field labels rendered inside
+   * this component. Falls back to foreground_color → theme.on_surface.
+   */
+  label_color?: string;
+
   background_pic_path?: string;
 
   // Field / column overrides
@@ -705,7 +769,7 @@ export interface UISystemManifest {
   manifest_id: string;
   manifest_version?: string;
   description?: string;
-  namespaces?: Array<'core' | 'schemata' | 'uam' | 'form' | 'ui'>;
+  namespaces?: Array<string>;
 
   // Form Engine (from form_schema_v4.yaml) — kept as opaque maps here;
   // FormEngine components consume them directly via libs/types.
@@ -718,7 +782,7 @@ export interface UISystemManifest {
   data_sources?: Record<string, any>;
   i18n?: Record<string, Record<string, string>>;
   tracking?: Record<string, any>;
-  forms?: Record<string, any>;
+  forms?: Record<string, FormDef>;
 
   // UI Layer (from ui_design.yaml)
   icons?: Record<string, IconEntry>;

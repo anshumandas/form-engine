@@ -1,38 +1,59 @@
 /**
  * auth_ui_manifest.ts
  *
- * The landing page and auth page expressed as a UISystemManifest
- * conforming to ui_system.schema.yaml — rendered at runtime by
- * UIManifestRenderer, which resolves Form components via @form-engine.
+ * The complete landing + auth page expressed as a UISystemManifest.
  *
- * This file is the "use-case example" demonstrating that screens,
- * navigation, themes, and embedded forms all live in a single YAML
- * (represented here as a TypeScript literal for type safety).
+ * ── How the page is rendered ────────────────────────────────────────────────
+ * UIManifestRenderer renders the `auth` screen end-to-end.
+ * page.tsx provides:
+ *   handlers         — submit functions + on_press callbacks
+ *   customComponents — React implementations keyed by component.name
+ *   context          — { mode: "signin" | "signup" } for hidden_condition eval
+ *
+ * ── Custom component nesting ─────────────────────────────────────────────────
+ * `auth_card` is type: Custom with sub_components. The patched ComponentRenderer
+ * walks sub_components, filters each placement by hidden_condition (evaluated
+ * against context.mode via new Function()), resolves the child component from
+ * manifest.components, and renders it recursively via ComponentRenderer.
+ * The resulting React nodes are passed as `children` to AuthCardWrapper.
+ *
+ * hidden_condition strings use the `context` variable which maps to engineContext.
+ *
+ * ── Component map ────────────────────────────────────────────────────────────
+ *  Floating  background_grid   SVG grid overlay             (Custom)
+ *  Floating  orbs              Animated gradient blobs      (Custom)
+ *  Left      hero_column       Brand + headline + bullets   (Custom)
+ *  Right     auth_card         Card shell                   (Custom, has sub_components)
+ *              ├─ Top     auth_card_header   Logo + heading            (Custom)
+ *              ├─ Top     auth_mode_tabs     Sign in / Sign up toggle  (Custom)
+ *              ├─ Center  signin_form        FormEngine form           (Form — hidden when mode≠signin)
+ *              ├─ Center  signup_form        FormEngine form           (Form — hidden when mode≠signup)
+ *              └─ Bottom  auth_card_footer   Toggle link + badge       (Custom)
  */
 
-import type { UISystemManifest } from "@/components/UIBuilder/VisualUIBuilder";
+import {
+  ComponentType,
+  IconType,
+  LayoutDirection,
+  type UISystemManifest,
+} from "@form-engine/components/UIEngine/types";
 
 export const authUIManifest: UISystemManifest = {
   manifest_id: "auth_ui",
   manifest_version: "1.0.0",
-  description:
-    "Landing page + authentication screens. " +
-    "Demonstrates the UISystemManifest format: screens compose components, " +
-    "Form components embed form-engine manifests, themes control brand tokens.",
+  description: "Landing + auth page. Every visual section is a manifest component.",
 
-  namespaces: ["core", "schemata", "uam", "form", "ui"],
+  namespaces: ["form", "ui"],
 
-  // ── Active theme ──────────────────────────────────────────────────────────
   active_theme: "auth_dark",
 
-  // ── Form engine config ─────────────────────────────────────────────────────
   engine: {
     mode: "reactive",
     error_mode: "collect-all",
     debounce_ms: 300,
   },
 
-  // ── Embedded form definitions (from @form-engine) ─────────────────────────
+  // ── Forms ─────────────────────────────────────────────────────────────────
   forms: {
     signin: {
       title: "Sign in",
@@ -44,26 +65,8 @@ export const authUIManifest: UISystemManifest = {
         {
           id: "credentials",
           fields: [
-            {
-              id: "email",
-              type: "text",
-              label: "Email address",
-              required: true,
-              placeholder: "you@company.com",
-              autocomplete: "email",
-              width: "full"
-            },
-            {
-              id: "password",
-              type: "text",
-              label: "Password",
-              required: true,
-              placeholder: "········",
-              min_length: 6,
-              confidentiality: "Secret",
-              autocomplete: "current-password",
-              width: "full"
-            },
+            { id: "email",    type: "text", label: "Email address", required: true, placeholder: "you@company.com", autocomplete: "email",            width: "full" },
+            { id: "password", type: "text", label: "Password",      required: true, placeholder: "········",        autocomplete: "current-password", width: "full", min_length: 6, confidentiality: "Secret" },
           ],
         },
       ],
@@ -80,46 +83,10 @@ export const authUIManifest: UISystemManifest = {
         {
           id: "identity",
           fields: [
-            {
-              id: "full_name",
-              type: "text",
-              label: "Full name",
-              required: true,
-              placeholder: "Jane Smith",
-              autocomplete: "name",
-              width: "full"
-            },
-            {
-              id: "email",
-              type: "text",
-              label: "Email address",
-              required: true,
-              placeholder: "you@company.com",
-              autocomplete: "email",
-              width: "full"
-            },
-            {
-              id: "password",
-              type: "text",
-              label: "Password",
-              required: true,
-              placeholder: "········",
-              confidentiality: "Secret",
-              min_length: 8,
-              hint: "At least 8 characters",
-              autocomplete: "new-password",
-              width: "full"
-            },
-            {
-              id: "confirm_password",
-              type: "text",
-              label: "Confirm password",
-              required: true,
-              placeholder: "········",
-              autocomplete: "new-password",
-              confidentiality: "Secret",
-              width: "full"
-            },
+            { id: "full_name",        type: "text", label: "Full name",        required: true, placeholder: "Jane Smith",      autocomplete: "name",         width: "full" },
+            { id: "email",            type: "text", label: "Email address",    required: true, placeholder: "you@company.com", autocomplete: "email",        width: "full" },
+            { id: "password",         type: "text", label: "Password",         required: true, placeholder: "········",        autocomplete: "new-password", width: "full", min_length: 8, hint: "At least 8 characters", confidentiality: "Secret" },
+            { id: "confirm_password", type: "text", label: "Confirm password", required: true, placeholder: "········",        autocomplete: "new-password", width: "full", confidentiality: "Secret" },
           ],
         },
       ],
@@ -127,145 +94,150 @@ export const authUIManifest: UISystemManifest = {
     },
   },
 
-  // ── Icons ──────────────────────────────────────────────────────────────────
+  // ── Icons ─────────────────────────────────────────────────────────────────
   icons: {
-    logo:         { type: "custom", name: "BrandIcon",  alt: "Form Engine logo" },
-    check:        { type: "lucide", name: "Check",           alt: "Checkmark" },
-    zap:          { type: "lucide", name: "Zap",             alt: "Lightning bolt" },
-    plug:         { type: "lucide", name: "Plug",            alt: "Plug" },
-    layers:       { type: "lucide", name: "Layers",          alt: "Layers" },
-    wand:         { type: "lucide", name: "Wand2",           alt: "Magic wand" },
+    logo: { type: IconType.Custom, name: "BrandIcon", alt: "Form Engine logo" },
+    zap:  { type: IconType.Lucide, name: "Zap",       alt: "Lightning bolt"   },
   },
 
-  // ── Toasts ─────────────────────────────────────────────────────────────────
+  // ── Toasts ────────────────────────────────────────────────────────────────
   toasts: {
-    signin_success: {
-      message: "Signed in — welcome back!",
-      severity: "success",
-      duration_ms: 3000,
-      position: "top_right",
-    },
-    signup_success: {
-      message: "Account created — welcome aboard!",
-      severity: "success",
-      duration_ms: 3000,
-      position: "top_right",
-    },
-    auth_error: {
-      message: "Authentication failed. Please try again.",
-      severity: "error",
-      duration_ms: 4000,
-      position: "top_right",
-    },
+    signin_success: { message: "Signed in — welcome back!",         severity: "success", duration_ms: 3000, position: "top_right" },
+    signup_success: { message: "Account created — welcome aboard!", severity: "success", duration_ms: 3000, position: "top_right" },
+    auth_error:     { message: "Authentication failed. Try again.", severity: "error",   duration_ms: 4000, position: "top_right" },
   },
 
-  // ── Buttons ────────────────────────────────────────────────────────────────
+  // ── Buttons ───────────────────────────────────────────────────────────────
   buttons: {
-    goto_signup:  { name: "goto_signup",  label: "Sign up free",      on_press: "navigate:auth?mode=signup" },
-    goto_signin:  { name: "goto_signin",  label: "Sign in",           on_press: "navigate:auth?mode=signin" },
-    goto_home:    { name: "goto_home",    label: "Go to dashboard",   on_press: "navigate:home" },
-    start_trial:  { name: "start_trial",  label: "Get started free →", on_press: "navigate:auth?mode=signup" },
-    view_docs:    { name: "view_docs",    label: "Read the docs",      on_press: "navigate:docs" },
+    goto_signup: { name: "goto_signup", label: "Sign up free",       on_press: "navigate:auth?mode=signup" },
+    goto_signin: { name: "goto_signin", label: "Sign in",            on_press: "navigate:auth?mode=signin" },
+    goto_home:   { name: "goto_home",   label: "Go to dashboard",    on_press: "navigate:home"             },
+    view_docs:   { name: "view_docs",   label: "Read the docs",      on_press: "navigate:docs"             },
   },
 
-  // ── Components ─────────────────────────────────────────────────────────────
+  // ── Components ────────────────────────────────────────────────────────────
   components: {
-    // Hero section (left column of auth page)
+
+    // ── Decorative overlays — screen placement: Floating ───────────────────
+
+    background_grid: {
+      name: "background_grid",
+      label: "Background Grid",
+      type: ComponentType.Custom,
+      // Registered React impl → BackgroundGrid (page.tsx)
+    },
+
+    orbs: {
+      name: "orbs",
+      label: "Gradient Orbs",
+      type: ComponentType.Custom,
+      // Registered React impl → Orbs (page.tsx)
+    },
+
+    // ── Left column — screen placement: Left ──────────────────────────────
+
     hero_column: {
       name: "hero_column",
       label: "Hero Column",
-      type: "Card",
-      text: "Forms that live in your config.",
+      type: ComponentType.Custom,
+      // Registered React impl → HeroColumn (page.tsx)
     },
 
-    // Feature grid shown under hero text
-    feature_grid: {
-      name: "feature_grid",
-      label: "Feature Highlights",
-      type: "VerticalList",
-      schema_ref: "FeatureItem",
+    // ── Auth card sub-components ──────────────────────────────────────────
+    //
+    // Declared as top-level manifest components so CustomRenderer can resolve
+    // them by name when walking auth_card.sub_components.
+
+    auth_card_header: {
+      name: "auth_card_header",
+      label: "Auth Card Header",
+      type: ComponentType.Custom,
+      // Registered React impl → AuthCardHeader
+      // Reads context.mode to switch heading text (Welcome back / Get started free)
     },
 
-    // Accent stripe at top of auth card
-    auth_card_stripe: {
-      name: "auth_card_stripe",
-      label: "Auth Card Accent",
-      type: "Custom",
-      text: "gradient-stripe",
+    auth_mode_tabs: {
+      name: "auth_mode_tabs",
+      label: "Auth Mode Tabs",
+      type: ComponentType.Custom,
+      // Registered React impl → AuthModeTabs
+      // Reads context.mode for active tab; fires handlers["navigate:auth?mode=…"]
     },
 
-    // Sign-in form component (embeds the signin form from forms above)
+    // Form components — visible / hidden via hidden_condition on their
+    // SubComponentPlacement inside auth_card.sub_components.
     signin_form: {
+      background_color: "#f9fafb",
+      foreground_color: "#818cf8",
       name: "signin_form",
       label: "Sign In Form",
-      type: "Form",
+      type: ComponentType.Form,
       form_ref: "signin",
       form_embed: { mode: "inline" },
     },
 
-    // Sign-up form component
     signup_form: {
       name: "signup_form",
+      foreground_color: "#818cf8",
       label: "Sign Up Form",
-      type: "Form",
+      type: ComponentType.Form,
       form_ref: "signup",
       form_embed: { mode: "inline" },
     },
 
-    // Auth card wrapper (conditionally shows signin or signup)
+    auth_card_footer: {
+      name: "auth_card_footer",
+      label: "Auth Card Footer",
+      type: ComponentType.Custom,
+      // Registered React impl → AuthCardFooter
+      // Reads context.mode to render "No account? Sign up" or "Have one? Sign in"
+    },
+
+    /**
+     * auth_card — composition via manifest sub_components
+     *
+     * type: Custom → ComponentRenderer → CustomRenderer
+     *
+     * CustomRenderer (patched):
+     *  1. Iterates sub_components in declaration order
+     *  2. Evaluates each hidden_condition string with new Function('context', …)
+     *     passing engineContext (= { mode }) as `context`
+     *  3. Resolves component_ref → manifest.components[ref]
+     *  4. Renders each visible child via ComponentRenderer recursively
+     *  5. Passes the resulting React nodes as `children` to AuthCardWrapper
+     *
+     * AuthCardWrapper renders the white card shell and renders {children} inside.
+     * No inner UIManifestRenderer call is needed — the engine owns all resolution.
+     *
+     * hidden_condition semantics: expression returns true → placement is HIDDEN.
+     *   "context.mode !== 'signin'"  hides signin_form when mode is "signup"
+     *   "context.mode !== 'signup'"  hides signup_form when mode is "signin"
+     */
     auth_card: {
       name: "auth_card",
       label: "Auth Card",
-      type: "Card",
+      type: ComponentType.Custom,
+      // Registered React impl → AuthCardWrapper
       sub_components: [
-        { component_ref: "auth_card_stripe", direction: "Top" },
-        { component_ref: "signin_form",      direction: "Center" },
-      ],
-    },
-
-    // Landing page standalone CTA card
-    cta_card: {
-      name: "cta_card",
-      label: "CTA Card",
-      type: "Card",
-      text: "Start building in minutes",
-      actions: [
-        { name: "cta_signup", label: "Get started free →", on_press: "navigate:auth?mode=signup" },
-        { name: "cta_docs",   label: "Read the docs",      on_press: "navigate:docs" },
-      ],
-    },
-
-    // Top navigation bar
-    top_nav: {
-      name: "top_nav",
-      label: "Top Navigation",
-      type: "HorizontalList",
-      actions: [
-        { name: "nav_signin", label: "Sign in",        on_press: "navigate:auth?mode=signin" },
-        { name: "nav_signup", label: "Get started →",  on_press: "navigate:auth?mode=signup" },
+        { component_ref: "auth_card_header", direction: LayoutDirection.Top    },
+        { component_ref: "auth_mode_tabs",   direction: LayoutDirection.Top    },
+        {
+          component_ref:    "signin_form",
+          direction:         LayoutDirection.Center,
+          hidden_condition: "context.mode !== 'signin'",
+        },
+        {
+          component_ref:    "signup_form",
+          direction:         LayoutDirection.Center,
+          hidden_condition: "context.mode !== 'signup'",
+        },
+        { component_ref: "auth_card_footer", direction: LayoutDirection.Bottom },
       ],
     },
   },
 
-  // ── Screens ────────────────────────────────────────────────────────────────
+  // ── Screens ───────────────────────────────────────────────────────────────
   screens: {
-    // Landing / marketing page
-    landing: {
-      name: "landing",
-      label: "Landing Page",
-      is_home: true,
-      nav_order: 0,
-      theme_ref: "auth_dark",
-      auth_rules: { require_auth: false },
-      components: [
-        { component_ref: "top_nav",     direction: "Top"    },
-        { component_ref: "hero_column", direction: "Left"   },
-        { component_ref: "feature_grid", direction: "Center" },
-        { component_ref: "cta_card",    direction: "Bottom" },
-      ],
-    },
-
-    // Auth screen (sign-in / sign-up toggled at runtime)
     auth: {
       name: "auth",
       label: "Authentication",
@@ -273,37 +245,27 @@ export const authUIManifest: UISystemManifest = {
       theme_ref: "auth_dark",
       auth_rules: { require_auth: false, redirect_on_denied: "landing" },
       components: [
-        { component_ref: "hero_column", direction: "Left"   },
-        { component_ref: "auth_card",   direction: "Right"  },
-      ],
-    },
-
-    // Post-auth home dashboard (placeholder)
-    home: {
-      name: "home",
-      label: "Dashboard",
-      nav_order: 2,
-      auth_rules: { require_auth: true, redirect_on_denied: "auth" },
-      components: [
-        { component_ref: "top_nav", direction: "Top"    },
-        { component_ref: "cta_card", direction: "Center" },
+        { component_ref: "background_grid", direction: LayoutDirection.Floating },
+        { component_ref: "orbs",            direction: LayoutDirection.Floating },
+        { component_ref: "hero_column",     direction: LayoutDirection.Left,  span: 2 },
+        { component_ref: "auth_card",       direction: LayoutDirection.Right},
       ],
     },
   },
 
-  // ── Navigation ─────────────────────────────────────────────────────────────
+  // ── Navigation ────────────────────────────────────────────────────────────
   navigation: {
     type: "stack",
-    initial_screen: "landing",
+    initial_screen: "auth",
     routes: {
-      landing: { screen: "landing", path: "/",       auth_required: false },
-      auth:    { screen: "auth",    path: "/auth",   auth_required: false },
-      home:    { screen: "home",    path: "/home",   auth_required: true  },
+      auth: { screen: "auth", path: "/auth", auth_required: false },
+      home: { screen: "home", path: "/",     auth_required: true  },
+      docs: { screen: "docs", path: "/docs", auth_required: false },
     },
     guards: ["authGuard"],
   },
 
-  // ── Themes ─────────────────────────────────────────────────────────────────
+  // ── Themes ────────────────────────────────────────────────────────────────
   themes: {
     auth_dark: {
       label: "Auth Dark",
@@ -314,60 +276,12 @@ export const authUIManifest: UISystemManifest = {
         primary:       "#6366f1",
         primary_light: "#818cf8",
         primary_dark:  "#4f46e5",
-        surface:       "#ffffff",
-        on_surface:    "#111827",
-        outline:       "#e5e7eb",
+        surface:       "#07070e",
+        on_surface:    "#f9fafb",
+        outline:       "#1f2937",
         error:         "#b91c1c",
         success:       "#1b8a5a",
-        warning:       "#d97706",
-      },
-      dark_mode: {
-        surface:    "#07070e",
-        on_surface: "#f9fafb",
-        outline:    "#1f2937",
       },
     },
   },
 };
-
-/**
- * YAML equivalent (generated from the manifest above).
- * Paste this into the UI Builder's "Paste YAML" panel to load the manifest
- * visually, or upload it as a file.
- *
- * manifest_id: auth_ui
- * manifest_version: "1.0.0"
- * description: Landing page + authentication screens.
- * active_theme: auth_dark
- * engine:
- *   mode: reactive
- *   error_mode: collect-all
- * forms:
- *   signin:
- *     title: Sign in
- *     version: "1.0.0"
- *     layout: { type: single-page }
- *     ...
- * screens:
- *   landing:
- *     name: landing
- *     is_home: true
- *     ...
- *   auth:
- *     name: auth
- *     ...
- * navigation:
- *   type: stack
- *   initial_screen: landing
- *   routes:
- *     landing: { screen: landing, path: "/" }
- *     auth:    { screen: auth,    path: /auth }
- *     home:    { screen: home,    path: /home, auth_required: true }
- * themes:
- *   auth_dark:
- *     label: Auth Dark
- *     extends: default
- *     colors:
- *       primary: "#6366f1"
- *       ...
- */

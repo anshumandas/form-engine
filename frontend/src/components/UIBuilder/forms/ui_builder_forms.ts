@@ -31,7 +31,7 @@
  *   into the appropriate select / multiselect fields.
  */
 
-import type { UISystemManifest, Component, Screen, NavigationConfig, ThemeDefinition } from "../UIEngine/types";
+import type { UISystemManifest, Component, Screen, NavigationConfig, ThemeDefinition } from "@form-engine/components/UIEngine/types";
 
 // ---------------------------------------------------------------------------
 // FormManifest compat types

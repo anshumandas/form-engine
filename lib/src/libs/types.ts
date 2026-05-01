@@ -503,7 +503,7 @@ export interface NamedValidationRule {
 
 // ─── Manifest ─────────────────────────────────────────────────────────────────
 export interface FormManifest {
-  manifest_id?: string;
+  manifest_id: string;
   manifest_version?: string;
   engine?: EngineConfig;
   namespaces?: string[];

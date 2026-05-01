@@ -41,6 +41,7 @@ import {
   ThemeDefinition,
   LayoutDirection,
   Route,
+  Toast,
 } from "@form-engine/components/UIEngine/types";
 
 // ── The builder's own UI is rendered by UIEngine ──────────────────────────────
@@ -431,21 +432,20 @@ function ScreensPanel({ manifest, builderManifest, selected, onSelect, onUpdate 
         <div className="flex-1 overflow-auto">
           {screenKeys.length === 0 && <p className="text-xs text-gray-400 p-3 text-center">No screens</p>}
           {screenKeys.map(key => (
-            <div
-              key={key}
-              role="button"
-              tabIndex={0}
-              onClick={() => onSelect(key)}
-              onKeyDown={e => e.key === "Enter" && onSelect(key)}
-              className={cn(
-                "w-full text-left px-3 py-2.5 text-xs border-b border-gray-100 dark:border-gray-800 flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors group cursor-pointer select-none",
-                selected === key
-                  ? "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300"
-                  : "text-gray-700 dark:text-gray-300",
-              )}
-            >
-              <span>{screens[key].is_home ? "🏠" : "📱"}</span>
-              <span className="truncate flex-1 font-medium">{screens[key].label ?? key}</span>
+            <div key={key} className="flex items-center gap-2 border-b border-gray-100 dark:border-gray-800 group">
+              <button
+                type="button"
+                onClick={() => onSelect(key)}
+                className={cn(
+                  "flex-1 text-left px-3 py-2.5 text-xs flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors cursor-pointer select-none",
+                  selected === key
+                    ? "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300"
+                    : "text-gray-700 dark:text-gray-300",
+                )}
+              >
+                <span>{screens[key].is_home ? "🏠" : "📱"}</span>
+                <span className="truncate flex-1 font-medium">{screens[key].label ?? key}</span>
+              </button>
               <button
                 type="button"
                 onClick={e => { e.stopPropagation(); deleteScreen(key); }}
@@ -542,7 +542,7 @@ function ComponentsPanel({
           name:  key,
           label: String(answers.label || key),
           type:  (answers.type as ComponentType) || "Card",
-        },
+        } as Component,
       },
     });
     onSelect(key);
@@ -563,7 +563,7 @@ function ComponentsPanel({
           theme_ref:   String(answers.theme_ref   || "") || undefined,
           schema_ref:  String(answers.schema_ref  || "") || undefined,
           text:        String(answers.text        || "") || undefined,
-        },
+        } as Component,
       },
     });
     toast.success("Component updated");
@@ -885,7 +885,7 @@ function NavigationPanel({ manifest, builderManifest, onUpdate }: {
       navigation: {
         ...nav,
         type:             (answers.nav_type as UINavigation["type"]) || "stack",
-        initial_screen:   String(answers.initial_screen || "") || undefined,
+        initial_screen:   String(answers.initial_screen || ""),
         tab_bar_position: (answers.tab_bar_position as "top" | "bottom") || undefined,
       },
     });
@@ -1029,7 +1029,7 @@ function ThemesPanel({ manifest, builderManifest, selected, onSelect, onUpdate }
             success:       String(answers.color_success        || "") || undefined,
             warning:       String(answers.color_warning        || "") || undefined,
           },
-        },
+        } as ThemeDefinition,
       },
     });
     toast.success("Theme updated");
@@ -1048,24 +1048,23 @@ function ThemesPanel({ manifest, builderManifest, selected, onSelect, onUpdate }
         <div className="flex-1 overflow-auto">
           {themeKeys.length === 0 && <p className="text-xs text-gray-400 p-3 text-center">No custom themes</p>}
           {themeKeys.map(key => (
-            <div
-              key={key}
-              role="button"
-              tabIndex={0}
-              onClick={() => onSelect(key)}
-              onKeyDown={e => e.key === "Enter" && onSelect(key)}
-              className={cn(
-                "w-full text-left px-3 py-2.5 text-xs border-b border-gray-100 dark:border-gray-800 flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors group cursor-pointer select-none",
-                selected === key
-                  ? "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300"
-                  : "text-gray-700 dark:text-gray-300",
-              )}
-            >
-              {themes[key].preview_color && (
-                <span className="h-3 w-3 rounded-full flex-shrink-0 border border-gray-200"
-                  style={{ background: `#${themes[key].preview_color}` }} />
-              )}
-              <span className="truncate flex-1 font-medium">{themes[key].label ?? key}</span>
+            <div key={key} className="flex items-center gap-2 border-b border-gray-100 dark:border-gray-800 group">
+              <button
+                type="button"
+                onClick={() => onSelect(key)}
+                className={cn(
+                  "flex-1 text-left px-3 py-2.5 text-xs flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors cursor-pointer select-none",
+                  selected === key
+                    ? "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300"
+                    : "text-gray-700 dark:text-gray-300",
+                )}
+              >
+                {themes[key].preview_color && (
+                  <span className="h-3 w-3 rounded-full flex-shrink-0 border border-gray-200"
+                    style={{ background: `#${themes[key].preview_color}` }} />
+                )}
+                <span className="truncate flex-1 font-medium">{themes[key].label ?? key}</span>
+              </button>
               <button
                 type="button"
                 onClick={e => { e.stopPropagation(); deleteTheme(key); }}
@@ -1151,7 +1150,7 @@ function AssetsPanel({ manifest, builderManifest, onUpdate }: {
 
   const saveToast = (a: FieldAnswers) => {
     const key = String(a.key || `toast_${Object.keys(toasts).length + 1}`).toLowerCase().replace(/\s+/g, "_");
-    onUpdate({ ...manifest, toasts: { ...toasts, [key]: { message: String(a.message || ""), severity: String(a.severity || "info") } } });
+    onUpdate({ ...manifest, toasts: { ...toasts, [key]: { message: String(a.message || ""), severity: String(a.severity || "info") } as Toast } });
     toast.success("Toast saved");
   };
 

@@ -54,8 +54,8 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
+import type { UISystemManifest } from "@form-engine/components/UIEngine/types";
 import type { FormManifest } from "@form-engine/libs/types";
-import type { UISystemManifest } from "@/components/UIBuilder/VisualUIBuilder";
 
 // ─── Static base manifest (no dynamic choices yet) ────────────────────────────
 

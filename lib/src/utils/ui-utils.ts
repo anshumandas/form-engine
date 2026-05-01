@@ -190,7 +190,7 @@ export function applyThemeToDOM(theme: Theme, isDarkMode: boolean = false) {
 }
 
 export function createThemeStylesheet(theme: Theme): string {
-  const colors = theme.colors;
+  const colors = theme.colors || {};
   const entries = Object.entries(colors)
     .map(([key, value]) => `--color-${key}: ${value};`)
     .join('\n  ');

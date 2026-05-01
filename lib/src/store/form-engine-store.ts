@@ -55,7 +55,7 @@ export const useFormEngineStore = create<FormEngineState>()(
       context: {},
 
       init: (manifest, formId, initialAnswers = {}, context = {}) => {
-        const form = manifest.forms?.[formId] ?? null;
+        const form = manifest?.forms?.[formId] ?? null;
         const answers = { ...initialAnswers };
         if (form) {
           const allFields = collectAllFields(form);

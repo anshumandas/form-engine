@@ -9,15 +9,44 @@ import { useUIEngine, useConditionEvaluator, useTheme, useBreakpoint } from './c
 import { ComponentRenderer } from './renderers';
 
 // ─────────────────────────────────────────────────────────────────────────────
+// PORTRAIT DETECTION
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Returns true when the viewport is narrower than 768 px OR taller than it is
+ * wide (portrait orientation). Updates reactively on resize / orientation change.
+ */
+function useIsPortrait(): boolean {
+  const [portrait, setPortrait] = React.useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 768 || window.innerHeight > window.innerWidth;
+  });
+
+  React.useEffect(() => {
+    const mql = window.matchMedia('(max-width: 767px), (orientation: portrait)');
+    const handler = (e: MediaQueryListEvent) => setPortrait(e.matches);
+    mql.addEventListener('change', handler);
+    setPortrait(mql.matches);
+    return () => mql.removeEventListener('change', handler);
+  }, []);
+
+  return portrait;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // LAYOUT CONTAINER
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface LayoutProps {
   children: React.ReactNode;
   direction: LayoutDirection;
+  /** Flex-weight for Left / Right panels in landscape (default 1). */
+  span?: number;
+  /** When true the panel sits in a vertical stack — span is ignored. */
+  isPortrait?: boolean;
 }
 
-export const LayoutContainer: React.FC<LayoutProps> = ({ children, direction }) => {
+export const LayoutContainer: React.FC<LayoutProps> = ({ children, direction, span = 1, isPortrait = false }) => {
   const theme = useTheme();
   const breakpoint = useBreakpoint();
 
@@ -35,7 +64,7 @@ export const LayoutContainer: React.FC<LayoutProps> = ({ children, direction }) 
           justifyContent: 'flex-start',
           alignItems: 'stretch',
           minHeight: '400px',
-          padding: `0 ${theme.spacing.md || '16px'}`,
+          padding: `0 ${theme.spacing?.md || '16px'}`,
         };
 
       case LayoutDirection.Top:
@@ -44,14 +73,14 @@ export const LayoutContainer: React.FC<LayoutProps> = ({ children, direction }) 
           flexDirection: 'row',
           justifyContent: 'space-between',
           alignItems: 'center',
-          padding: theme.spacing.md || '16px',
-          backgroundColor: theme.colors.primary || '#007AFF',
+          padding: theme.spacing?.md || '16px',
+          backgroundColor: theme.colors?.primary || '#007AFF',
           color: 'white',
           minHeight: '56px',
           position: 'sticky',
           top: 0,
           zIndex: 100,
-          boxShadow: theme.elevation.default || '0 2px 4px rgba(0,0,0,0.1)',
+          boxShadow: theme.elevation?.default || '0 2px 4px rgba(0,0,0,0.1)',
         };
 
       case LayoutDirection.Bottom:
@@ -60,9 +89,9 @@ export const LayoutContainer: React.FC<LayoutProps> = ({ children, direction }) 
           flexDirection: 'row',
           justifyContent: 'space-around',
           alignItems: 'center',
-          padding: theme.spacing.md || '16px',
-          backgroundColor: theme.colors.surface || '#FFFFFF',
-          borderTop: `1px solid ${theme.colors.outline || '#E0E0E0'}`,
+          padding: theme.spacing?.md || '16px',
+          backgroundColor: theme.colors?.surface || '#FFFFFF',
+          borderTop: `1px solid ${theme.colors?.outline || '#E0E0E0'}`,
           minHeight: '56px',
           position: 'sticky',
           bottom: 0,
@@ -70,55 +99,65 @@ export const LayoutContainer: React.FC<LayoutProps> = ({ children, direction }) 
         };
 
       case LayoutDirection.Left:
-        return {
-          ...baseStyle,
-          flexDirection: 'column',
-          justifyContent: 'flex-start',
-          alignItems: 'stretch',
-          width: breakpoint?.columns ? `${(breakpoint.columns / 24) * 100}%` : '250px',
-          backgroundColor: theme.colors.surface || '#FFFFFF',
-          borderRight: `1px solid ${theme.colors.outline || '#E0E0E0'}`,
-          padding: theme.spacing.md || '16px',
-          position: 'sticky',
-          left: 0,
-          top: 0,
-          zIndex: 90,
-          maxHeight: '100vh',
-          overflowY: 'auto',
-        };
+        return isPortrait
+          ? {
+              ...baseStyle,
+              flexDirection: 'column',
+              justifyContent: 'flex-start',
+              alignItems: 'stretch',
+              width: '100%',
+              position: 'relative',
+              zIndex: 1,
+              overflowY: 'auto',
+            }
+          : {
+              ...baseStyle,
+              flexDirection: 'column',
+              justifyContent: 'flex-start',
+              alignItems: 'stretch',
+              flex: breakpoint?.columns ? (breakpoint.columns / 24) : span,
+              minWidth: 0,
+              position: 'relative',
+              zIndex: 1,
+              overflowY: 'auto',
+            };
 
       case LayoutDirection.Right:
-        return {
-          ...baseStyle,
-          flexDirection: 'column',
-          justifyContent: 'flex-start',
-          alignItems: 'stretch',
-          width: breakpoint?.columns ? `${(breakpoint.columns / 24) * 100}%` : '250px',
-          backgroundColor: theme.colors.surface || '#FFFFFF',
-          borderLeft: `1px solid ${theme.colors.outline || '#E0E0E0'}`,
-          padding: theme.spacing.md || '16px',
-          position: 'sticky',
-          right: 0,
-          top: 0,
-          zIndex: 90,
-          maxHeight: '100vh',
-          overflowY: 'auto',
-        };
+        return isPortrait
+          ? {
+              ...baseStyle,
+              flexDirection: 'column',
+              justifyContent: 'flex-start',
+              alignItems: 'center',
+              width: '100%',
+              position: 'relative',
+              zIndex: 1,
+              overflowY: 'auto',
+              padding: theme.spacing?.md || '16px',
+            }
+          : {
+              ...baseStyle,
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+              flex: breakpoint?.columns ? ((24 - breakpoint.columns) / 24) * 2 : span,
+              minWidth: 0,
+              position: 'relative',
+              zIndex: 1,
+              overflowY: 'auto',
+              padding: theme.spacing?.lg || '32px',
+            };
 
       case LayoutDirection.Floating:
         return {
           ...baseStyle,
-          flexDirection: 'column',
           position: 'fixed',
-          bottom: '24px',
-          right: '24px',
-          width: 'auto',
-          minWidth: '56px',
-          minHeight: '56px',
-          borderRadius: '50%',
-          backgroundColor: theme.colors.primary || '#007AFF',
-          boxShadow: theme.elevation.default || '0 2px 8px rgba(0,0,0,0.15)',
-          zIndex: 80,
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          pointerEvents: 'none',
+          zIndex: 0,
+          overflow: 'hidden',
         };
 
       case LayoutDirection.Modal:
@@ -188,9 +227,10 @@ export const SubComponentPlacementRenderer: React.FC<SubComponentRendererProps> 
 interface DirectionGroupProps {
   direction: LayoutDirection;
   placements: SubComponentPlacement[];
+  isPortrait?: boolean;
 }
 
-const DirectionGroup: React.FC<DirectionGroupProps> = ({ direction, placements }) => {
+const DirectionGroup: React.FC<DirectionGroupProps> = ({ direction, placements, isPortrait = false }) => {
   const filteredPlacements = useMemo(
     () => placements.filter(p => p.direction === direction),
     [placements, direction]
@@ -200,8 +240,12 @@ const DirectionGroup: React.FC<DirectionGroupProps> = ({ direction, placements }
     return null;
   }
 
+  // Use the span declared on the first placement for this direction slot.
+  // Typically Left and Right each have one placement; this covers that case cleanly.
+  const span = filteredPlacements[0]?.span ?? 1;
+
   return (
-    <LayoutContainer direction={direction}>
+    <LayoutContainer direction={direction} span={span} isPortrait={isPortrait}>
       {filteredPlacements.map((placement, index) => (
         <SubComponentPlacementRenderer
           key={`${placement.component_ref}-${placement.direction}-${index}`}
@@ -222,43 +266,59 @@ interface ScreenLayoutProps {
 
 export const ScreenLayout: React.FC<ScreenLayoutProps> = ({ componentPlacements }) => {
   const theme = useTheme();
+  const isPortrait = useIsPortrait();
 
   const screenStyle: React.CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
     minHeight: '100vh',
-    backgroundColor: theme.colors.surface || '#FFFFFF',
-    fontFamily: theme.typography.font_family_default || 'system-ui, sans-serif',
-    color: theme.colors.on_surface || '#000',
+    backgroundColor: theme.colors?.surface || 'transparent',
+    fontFamily: theme.typography?.font_family_default || 'system-ui, sans-serif',
+    color: theme.colors?.on_surface || '#000',
+    position: 'relative',
   };
+
+  const hasCenter = useMemo(
+    () => componentPlacements.some(p => p.direction === LayoutDirection.Center),
+    [componentPlacements]
+  );
 
   return (
     <div style={screenStyle}>
-      {/* Modal overlays from Modal direction */}
-      <DirectionGroup direction={LayoutDirection.Modal} placements={componentPlacements} />
+      {/* Full-screen floating overlays rendered at root level (background grids, orbs, etc.) */}
+      <DirectionGroup direction={LayoutDirection.Floating} placements={componentPlacements} isPortrait={isPortrait} />
+
+      {/* Modal overlays */}
+      <DirectionGroup direction={LayoutDirection.Modal} placements={componentPlacements} isPortrait={isPortrait} />
 
       {/* Top bar / header */}
-      <DirectionGroup direction={LayoutDirection.Top} placements={componentPlacements} />
+      <DirectionGroup direction={LayoutDirection.Top} placements={componentPlacements} isPortrait={isPortrait} />
 
-      {/* Main content area with left, center, right, and floating */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Left sidebar */}
-        <DirectionGroup direction={LayoutDirection.Left} placements={componentPlacements} />
+      {/* Main content area — row on landscape, column on portrait */}
+      <div style={{
+        display: 'flex',
+        flex: 1,
+        overflow: 'hidden',
+        position: 'relative',
+        zIndex: 1,
+        flexDirection: isPortrait ? 'column' : 'row',
+      }}>
+        {/* Left panel */}
+        <DirectionGroup direction={LayoutDirection.Left} placements={componentPlacements} isPortrait={isPortrait} />
 
-        {/* Center content */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-          <DirectionGroup direction={LayoutDirection.Center} placements={componentPlacements} />
-        </div>
+        {/* Center content — only rendered when center placements exist */}
+        {hasCenter && (
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+            <DirectionGroup direction={LayoutDirection.Center} placements={componentPlacements} isPortrait={isPortrait} />
+          </div>
+        )}
 
-        {/* Right sidebar */}
-        <DirectionGroup direction={LayoutDirection.Right} placements={componentPlacements} />
-
-        {/* Floating elements (FAB, etc.) */}
-        <DirectionGroup direction={LayoutDirection.Floating} placements={componentPlacements} />
+        {/* Right panel */}
+        <DirectionGroup direction={LayoutDirection.Right} placements={componentPlacements} isPortrait={isPortrait} />
       </div>
 
-      {/* Bottom bar / footer / tab bar */}
-      <DirectionGroup direction={LayoutDirection.Bottom} placements={componentPlacements} />
+      {/* Bottom bar / footer */}
+      <DirectionGroup direction={LayoutDirection.Bottom} placements={componentPlacements} isPortrait={isPortrait} />
     </div>
   );
 };

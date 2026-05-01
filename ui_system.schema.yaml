@@ -1301,7 +1301,7 @@ $defs:
         additionalProperties: { type: string }
 
   ConditionOrRef:
-    description: Inline Condition or { ref: namedConditionKey }.
+    description: "Inline Condition or { ref: namedConditionKey }."
     oneOf:
       - $ref: "#/$defs/Condition"
       - type: object
