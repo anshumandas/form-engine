@@ -254,10 +254,7 @@ function ScopedField({ field, value, allValues, onChange }: {
     case "json":
       return (
         <FieldWrapper label={field.label} required={field.required} hint={field.hint} width={field.width}>
-          <textarea value={typeof value === "string" ? value : JSON.stringify(value ?? {}, null, 2)}
-            onChange={e => { try { onChange(JSON.parse(e.target.value)); } catch { onChange(e.target.value); } }}
-            rows={(field as any).rows ?? 4}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-xs font-mono focus:border-blue-500 focus:outline-none" />
+          <JsonInlineEditor value={value} onChange={onChange} />
         </FieldWrapper>
       );
     default:
@@ -267,4 +264,58 @@ function ScopedField({ field, value, allValues, onChange }: {
         </FieldWrapper>
       );
   }
+}
+
+
+// ─── JsonInlineEditor (used inside collections) ───────────────────────────────
+// Simplified: array → add/remove rows; object → key-value; else → textarea
+function JsonInlineEditor({ value, onChange }: { value: unknown; onChange: (v: unknown) => void }) {
+  const isArray  = Array.isArray(value);
+  const isObject = !isArray && value !== null && typeof value === "object";
+
+  if (isArray) {
+    const items = value as unknown[];
+    return (
+      <div className="space-y-1.5">
+        {items.map((item, idx) => (
+          <div key={idx} className="flex gap-1.5 items-center">
+            <span className="text-xs text-gray-400 w-5 text-right">{idx + 1}.</span>
+            <input value={String(item ?? "")} onChange={e => onChange(items.map((it,i) => i===idx ? e.target.value : it))}
+              className="flex-1 rounded-md border border-gray-200 px-2 py-1 text-xs bg-white focus:border-blue-400 focus:outline-none" />
+            <button type="button" onClick={() => onChange(items.filter((_,i) => i!==idx))}
+              className="text-gray-300 hover:text-red-500 text-xs px-1">✕</button>
+          </div>
+        ))}
+        <button type="button" onClick={() => onChange([...items, ""])}
+          className="text-xs text-blue-600 hover:underline">+ Add item</button>
+      </div>
+    );
+  }
+
+  if (isObject) {
+    const obj = value as Record<string, unknown>;
+    const keys = Object.keys(obj);
+    return (
+      <div className="space-y-1.5">
+        {keys.map(k => (
+          <div key={k} className="flex gap-1.5 items-center">
+            <span className="text-xs font-mono text-gray-500 w-24 truncate">{k}</span>
+            <input value={String(obj[k] ?? "")} onChange={e => onChange({ ...obj, [k]: e.target.value })}
+              className="flex-1 rounded-md border border-gray-200 px-2 py-1 text-xs bg-white focus:border-blue-400 focus:outline-none" />
+            <button type="button" onClick={() => { const n={...obj}; delete n[k]; onChange(n); }}
+              className="text-gray-300 hover:text-red-500 text-xs px-1">✕</button>
+          </div>
+        ))}
+        <button type="button" onClick={() => onChange({ ...obj, [`key_${keys.length+1}`]: "" })}
+          className="text-xs text-blue-600 hover:underline">+ Add field</button>
+      </div>
+    );
+  }
+
+  return (
+    <textarea value={typeof value === "string" ? value : JSON.stringify(value ?? {}, null, 2)}
+      onChange={e => { try { onChange(JSON.parse(e.target.value)); } catch { onChange(e.target.value); } }}
+      rows={4}
+      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-xs font-mono focus:border-blue-500 focus:outline-none" />
+  );
 }

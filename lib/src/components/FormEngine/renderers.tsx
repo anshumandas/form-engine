@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import type { FormManifest, FormDef, FormField, FieldAnswers, FormContext } from "../../libs/types";
 import { useFormEngineStore } from "../../store/form-engine-store";
 import {
@@ -215,16 +215,12 @@ export function FieldRouter({ field, disabled }: FieldRouterProps) {
       return (
         <FieldWrapper label={field.label} required={field.required} hint={field.hint}
           description={field.description} errors={errors} width={field.width}>
-          <textarea
-            value={typeof value === "string" ? value : JSON.stringify(value ?? {}, null, 2)}
-            onChange={e => {
-              try { handleChange(JSON.parse(e.target.value)); }
-              catch { handleChange(e.target.value); }
-            }}
+          <JsonFieldEditor
+            field={field as any}
+            value={value}
+            onChange={handleChange}
             onBlur={handleBlur}
-            rows={(field as any).rows ?? 8}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-xs font-mono focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-            placeholder="{}"
+            disabled={isDisabled}
           />
         </FieldWrapper>
       );
@@ -235,4 +231,207 @@ export function FieldRouter({ field, disabled }: FieldRouterProps) {
         </FieldWrapper>
       );
   }
+}
+
+
+// ─── JsonFieldEditor — smart array/object/raw editor ────────────────────────
+// Detects whether the stored value is an array, plain object, or primitive and
+// renders the appropriate UI.  Arrays get an "Add item" button + per-item rows;
+// objects get a key-value table; everything else falls back to a mono textarea.
+
+interface JsonFieldEditorProps {
+  field: { label?: string; rows?: number };
+  value: unknown;
+  onChange: (v: unknown) => void;
+  onBlur?: () => void;
+  disabled?: boolean;
+}
+
+function JsonFieldEditor({ field, value, onChange, onBlur, disabled }: JsonFieldEditorProps) {
+  // Detect value shape
+  const isArray  = Array.isArray(value);
+  const isObject = !isArray && value !== null && typeof value === "object";
+  const rows     = (field as any).rows ?? 6;
+
+  // ── Array mode ─────────────────────────────────────────────────────────────
+  if (isArray) {
+    const items = value as unknown[];
+    const updateItem = (idx: number, val: unknown) =>
+      onChange(items.map((it, i) => i === idx ? val : it));
+    const removeItem = (idx: number) =>
+      onChange(items.filter((_, i) => i !== idx));
+    const addItem = () =>
+      onChange([...items, typeof items[0] === "object" && items[0] !== null
+        ? {} : ""]);
+
+    return (
+      <div className="space-y-2">
+        {items.length === 0 && (
+          <p className="text-xs text-gray-400 italic py-2 text-center">No items yet.</p>
+        )}
+        {items.map((item, idx) => (
+          <ArrayItemRow
+            key={idx}
+            index={idx}
+            item={item}
+            disabled={disabled}
+            onChange={v => updateItem(idx, v)}
+            onRemove={() => removeItem(idx)}
+          />
+        ))}
+        {!disabled && (
+          <button
+            type="button"
+            onClick={addItem}
+            onBlur={onBlur}
+            className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 px-4 py-2.5 text-sm font-medium text-gray-500 hover:border-blue-400 hover:text-blue-600 transition-colors">
+            <span className="text-base leading-none">+</span>
+            Add item
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // ── Object mode ────────────────────────────────────────────────────────────
+  if (isObject) {
+    const obj = value as Record<string, unknown>;
+    const keys = Object.keys(obj);
+    const updateKey = (k: string, v: unknown) => onChange({ ...obj, [k]: v });
+    const removeKey = (k: string) => {
+      const next = { ...obj };
+      delete next[k];
+      onChange(next);
+    };
+    const addKey = () => {
+      const newKey = `key_${keys.length + 1}`;
+      onChange({ ...obj, [newKey]: "" });
+    };
+
+    return (
+      <div className="space-y-1.5">
+        {keys.map(k => (
+          <div key={k} className="flex gap-1.5 items-center">
+            <span className="text-xs font-mono text-gray-500 w-28 flex-shrink-0 truncate" title={k}>{k}</span>
+            <input
+              value={String(obj[k] ?? "")}
+              disabled={disabled}
+              onChange={e => updateKey(k, e.target.value)}
+              onBlur={onBlur}
+              className="flex-1 rounded-md border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs bg-white dark:bg-gray-800 focus:border-blue-400 focus:outline-none"
+            />
+            {!disabled && (
+              <button type="button" onClick={() => removeKey(k)}
+                className="text-gray-300 hover:text-red-500 text-xs px-1">✕</button>
+            )}
+          </div>
+        ))}
+        {!disabled && (
+          <button type="button" onClick={addKey} onBlur={onBlur}
+            className="text-xs text-blue-600 hover:underline mt-1">+ Add field</button>
+        )}
+      </div>
+    );
+  }
+
+  // ── Fallback: raw mono textarea ─────────────────────────────────────────────
+  return (
+    <textarea
+      value={typeof value === "string" ? value : JSON.stringify(value ?? {}, null, 2)}
+      onChange={e => {
+        try { onChange(JSON.parse(e.target.value)); }
+        catch { onChange(e.target.value); }
+      }}
+      onBlur={onBlur}
+      disabled={disabled}
+      rows={rows}
+      placeholder="{}"
+      className="w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-xs font-mono focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white dark:bg-gray-800"
+    />
+  );
+}
+
+// ─── Array item row ───────────────────────────────────────────────────────────
+function ArrayItemRow({ index, item, onChange, onRemove, disabled }: {
+  index: number; item: unknown;
+  onChange: (v: unknown) => void; onRemove: () => void; disabled?: boolean;
+}) {
+  const [expanded, setExpanded] = useState(true);
+
+  if (item !== null && typeof item === "object" && !Array.isArray(item)) {
+    const obj = item as Record<string, unknown>;
+    const keys = Object.keys(obj);
+    return (
+      <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+        {/* row header */}
+        <div
+          className="flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800/60 cursor-pointer select-none"
+          onClick={() => setExpanded(e => !e)}>
+          <span className={`text-gray-400 text-xs transition-transform ${expanded ? "rotate-90" : ""}`}>▶</span>
+          <span className="flex-1 text-xs font-medium text-gray-600 dark:text-gray-300">
+            Item {index + 1}
+            {keys.length > 0 && (
+              <span className="ml-2 text-gray-400 font-normal">
+                {keys.slice(0, 2).map(k => `${k}: ${String(obj[k] ?? "").slice(0,16)}`).join(" · ")}
+                {keys.length > 2 ? ` · +${keys.length - 2} more` : ""}
+              </span>
+            )}
+          </span>
+          {!disabled && (
+            <button type="button" onClick={e => { e.stopPropagation(); onRemove(); }}
+              className="text-xs text-red-400 hover:text-red-600 px-2 py-0.5 rounded hover:bg-red-50 transition-colors">
+              Remove
+            </button>
+          )}
+        </div>
+
+        {expanded && (
+          <div className="p-3 space-y-2">
+            {keys.map(k => (
+              <div key={k} className="flex gap-2 items-center">
+                <label className="text-xs font-medium text-gray-500 w-24 flex-shrink-0 truncate capitalize" title={k}>
+                  {k.replace(/_/g, " ")}
+                </label>
+                {typeof obj[k] === "boolean" ? (
+                  <button type="button" disabled={disabled}
+                    onClick={() => onChange({ ...obj, [k]: !obj[k] })}
+                    className={`relative inline-flex h-5 w-9 rounded-full transition-colors flex-shrink-0 ${obj[k] ? "bg-blue-600" : "bg-gray-300"}`}>
+                    <span className={`inline-block h-3 w-3 mt-1 rounded-full bg-white transition-transform ${obj[k] ? "translate-x-5" : "translate-x-1"}`} />
+                  </button>
+                ) : (
+                  <input
+                    value={String(obj[k] ?? "")}
+                    disabled={disabled}
+                    onChange={e => onChange({ ...obj, [k]: e.target.value })}
+                    className="flex-1 rounded-md border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs bg-white dark:bg-gray-800 focus:border-blue-400 focus:outline-none"
+                  />
+                )}
+              </div>
+            ))}
+            {!disabled && keys.length === 0 && (
+              <p className="text-xs text-gray-400 italic">Empty object — add keys above.</p>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Primitive item
+  return (
+    <div className="flex gap-1.5 items-center">
+      <span className="text-xs text-gray-400 w-6 text-right flex-shrink-0">{index + 1}.</span>
+      <input
+        value={String(item ?? "")}
+        disabled={disabled}
+        onChange={e => onChange(e.target.value)}
+        className="flex-1 rounded-md border border-gray-200 dark:border-gray-700 px-2 py-1.5 text-xs bg-white dark:bg-gray-800 focus:border-blue-400 focus:outline-none"
+        placeholder="value"
+      />
+      {!disabled && (
+        <button type="button" onClick={onRemove}
+          className="text-gray-300 hover:text-red-500 text-xs px-1">✕</button>
+      )}
+    </div>
+  );
 }

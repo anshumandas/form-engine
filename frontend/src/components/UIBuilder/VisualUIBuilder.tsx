@@ -157,9 +157,14 @@ export function VisualUIBuilder({ initialManifest, onChange }: VisualUIBuilderPr
     if (formCreatorManifest) return;
     setFormCreatorLoading(true);
     try {
+      // api.getManifest checks localManifests first (zero-network when registered
+      // via FormEngineProvider config.localManifests = { form_creator: … })
       setFormCreatorManifest(await api.getManifest("form_creator"));
-    } catch { toast.error("Could not load form creator — is the backend running?"); }
-    finally { setFormCreatorLoading(false); }
+    } catch {
+      toast.error("Could not load form creator — is the backend running?");
+    } finally {
+      setFormCreatorLoading(false);
+    }
   };
 
   const screenKeys    = Object.keys(manifest.screens    ?? {});
@@ -817,23 +822,35 @@ function FormComponentPanel({
                 manifest={formCreatorManifest}
                 formId="create_form"
                 onSubmit={async (answers) => {
-                  const formId = slugify(String(answers.form_id ?? "")) || `form_${Date.now()}`;
+                  const formId     = slugify(String(answers.form_id ?? "")) || `form_${Date.now()}`;
                   const layoutType = String(answers.layout_type ?? "single-page");
+
+                  // Build wizard pages from comma-separated names field
+                  const rawPageNames = String(answers.wizard_pages ?? "").trim();
+                  const pageNames = layoutType === "wizard" && rawPageNames
+                    ? rawPageNames.split(",").map(s => s.trim()).filter(Boolean)
+                    : ["Page 1"];
+
+                  const pages = pageNames.map((name, i) => ({
+                    id:       `page_${i + 1}`,
+                    title:    name,
+                    sections: [{ id: `s_page_${i + 1}`, title: "Fields", fields: [] }],
+                  }));
+
                   onFormAdded({
                     manifest_id:      manifest.manifest_id,
                     manifest_version: "1.0.0",
                     forms: {
                       [formId]: {
-                        title:      String(answers.title ?? "New Form"),
-                        version:    "1.0.0",
-                        form_state: "active",
-                        layout:     { type: layoutType },
-                        sections:   layoutType !== "wizard"
+                        title:        String(answers.title ?? "New Form"),
+                        version:      "1.0.0",
+                        form_state:   "active",
+                        layout:       { type: layoutType },
+                        submit_label: String(answers.submit_label || "Submit") || undefined,
+                        sections:     layoutType !== "wizard"
                           ? [{ id: "section_1", title: "Section 1", fields: [] }]
                           : undefined,
-                        pages:      layoutType === "wizard"
-                          ? [{ id: "page_1", title: "Page 1", sections: [{ id: "s1", fields: [] }] }]
-                          : undefined,
+                        pages: layoutType === "wizard" ? pages : undefined,
                       } as unknown,
                     },
                   } as FormManifest);
