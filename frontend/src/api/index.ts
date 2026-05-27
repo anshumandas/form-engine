@@ -3,7 +3,7 @@ import type {
   ManifestSummary,
   FormSubmissionPayload,
   FormSubmissionResponse,
-} from "form-engine/src/libs/types";
+} from "@form-engine/libs/types";
 import { getConfig, resolveApiUrl } from "@form-engine/libs/config";
 
 // ─── Core fetcher ─────────────────────────────────────────────────────────────

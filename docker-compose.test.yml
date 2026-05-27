@@ -1,0 +1,43 @@
+# Local test harness — runs the full backend + lib suites in containers.
+# No cloud resources required.
+#
+#   docker compose -f docker-compose.test.yml up --build --abort-on-container-exit
+#
+# Exit code is non-zero if any suite fails (good for CI).
+services:
+
+  # ── Backend: pytest (FastAPI TestClient — no network/DB needed) ──────────────
+  backend-tests:
+    image: python:3.12-slim
+    working_dir: /repo
+    volumes:
+      - ./:/repo:ro
+      - test-pip-cache:/root/.cache/pip
+    environment:
+      - PYTHONUNBUFFERED=1
+    command:
+      - bash
+      - -lc
+      - |
+        set -e
+        pip install --no-cache-dir -r backend/requirements-dev.txt
+        pytest
+
+  # ── Lib: vitest (jsdom) ──────────────────────────────────────────────────────
+  lib-tests:
+    image: node:20-bookworm-slim
+    working_dir: /repo/lib
+    volumes:
+      - ./:/repo
+      - test-node-cache:/root/.npm
+    command:
+      - bash
+      - -lc
+      - |
+        set -e
+        npm install --legacy-peer-deps
+        npm test
+
+volumes:
+  test-pip-cache:
+  test-node-cache:

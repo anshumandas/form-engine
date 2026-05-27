@@ -29,10 +29,21 @@ interface FormEngineProps {
    */
   onDraftSave?: (answers: FieldAnswers) => Promise<void> | void;
   readOnly?: boolean;
+  /**
+   * Controls the built-in success screen shown after a successful submit.
+   * Precedence: this prop (if provided) → the form's `show_success_screen`
+   * flag in the manifest → defaults to `true`.
+   *
+   * Set to `false` for signin/signup forms: the submit waits for the server
+   * response and the form stays mounted, letting your onSubmit handler drive
+   * the outcome (e.g. redirect on success, surface an error on failure)
+   * instead of flashing a "submitted!" screen.
+   */
+  showSuccessScreen?: boolean;
 }
 
 export function FormEngine({
-  manifest, formId, initialAnswers, context, onSubmit, onDraftSave, readOnly
+  manifest, formId, initialAnswers, context, onSubmit, onDraftSave, readOnly, showSuccessScreen
 }: FormEngineProps) {
   const { init, form, submitted } = useFormEngineStore();
 
@@ -58,10 +69,15 @@ export function FormEngine({
     </div>
   );
 
-  // Only show success when there is NO submit error.
+  // Resolve whether the built-in success screen is allowed.
+  // Precedence: explicit prop → manifest form flag → default true.
+  const successScreenEnabled =
+    showSuccessScreen ?? form.show_success_screen ?? true;
+
+  // Only show success when enabled AND there is NO submit error.
   // If onSubmit threw, `submitted` may have been set by the store already,
   // so we gate on submitError being null as well.
-  if (submitted && !submitError) {
+  if (successScreenEnabled && submitted && !submitError) {
     const msg = form.on_submit?.success_message ?? "Form submitted successfully!";
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
@@ -194,6 +210,20 @@ export function FieldRouter({ field, disabled }: FieldRouterProps) {
     case "rating":       return <RatingFieldRenderer {...props} field={field as any} />;
     case "file":         return <FileFieldRenderer {...props} field={field as any} />;
     case "color":        return <ColorFieldRenderer {...props} field={field as any} />;
+    case "signature":
+      return (
+        <FieldWrapper label={field.label} required={field.required} hint={field.hint}
+          description={field.description} errors={errors} width={field.width}>
+          <SignaturePad value={value} onChange={handleChange} disabled={isDisabled} />
+        </FieldWrapper>
+      );
+    case "location":
+      return (
+        <FieldWrapper label={field.label} required={field.required} hint={field.hint}
+          description={field.description} errors={errors} width={field.width}>
+          <LocationInput field={field as any} value={value} onChange={handleChange} onBlur={handleBlur} disabled={isDisabled} />
+        </FieldWrapper>
+      );
     case "hidden":       return null;
     case "richtext":
       return <MultilineFieldRenderer {...props} field={{ ...field, type: "multiline" } as any} />;
@@ -431,6 +461,130 @@ function ArrayItemRow({ index, item, onChange, onRemove, disabled }: {
       {!disabled && (
         <button type="button" onClick={onRemove}
           className="text-gray-300 hover:text-red-500 text-xs px-1">✕</button>
+      )}
+    </div>
+  );
+}
+
+// ─── Signature pad (canvas, no external dependency) ──────────────────────────
+// Stores the drawn signature as a PNG data-URL string. Pointer coordinates are
+// scaled from the displayed size to the canvas backing store so the stroke
+// lands under the cursor regardless of CSS width.
+function SignaturePad({ value, onChange, disabled }: {
+  value: unknown; onChange: (v: unknown) => void; disabled?: boolean;
+}) {
+  const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
+  const drawing = React.useRef(false);
+
+  const at = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const c = canvasRef.current!;
+    const r = c.getBoundingClientRect();
+    return {
+      x: (e.clientX - r.left) * (c.width / r.width),
+      y: (e.clientY - r.top) * (c.height / r.height),
+    };
+  };
+  const start = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (disabled) return;
+    drawing.current = true;
+    const ctx = canvasRef.current!.getContext("2d")!;
+    const { x, y } = at(e);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+  };
+  const move = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!drawing.current || disabled) return;
+    const ctx = canvasRef.current!.getContext("2d")!;
+    const { x, y } = at(e);
+    ctx.lineTo(x, y);
+    ctx.strokeStyle = "#111827";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.stroke();
+  };
+  const end = () => {
+    if (!drawing.current) return;
+    drawing.current = false;
+    onChange(canvasRef.current!.toDataURL("image/png"));
+  };
+  const clear = () => {
+    const c = canvasRef.current!;
+    c.getContext("2d")!.clearRect(0, 0, c.width, c.height);
+    onChange(null);
+  };
+
+  return (
+    <div className="space-y-2">
+      <canvas
+        ref={canvasRef}
+        width={600}
+        height={160}
+        onPointerDown={start}
+        onPointerMove={move}
+        onPointerUp={end}
+        onPointerLeave={end}
+        className="w-full rounded-lg border border-gray-300 bg-white touch-none cursor-crosshair"
+        style={{ height: 160 }}
+      />
+      <div className="flex items-center gap-3">
+        {!disabled && (
+          <button type="button" onClick={clear} className="text-xs text-gray-500 hover:text-red-500">
+            Clear
+          </button>
+        )}
+        {value
+          ? <span className="text-xs text-green-600">✓ Signature captured</span>
+          : <span className="text-xs text-gray-400">Sign in the box above</span>}
+      </div>
+    </div>
+  );
+}
+
+// ─── Location input (address text and/or coordinates) ────────────────────────
+// Stores { address?, lat?, lng? }. Renders inputs according to field.mode:
+//   address-search → address only | coordinates → lat/lng | map-pin → both.
+function LocationInput({ field, value, onChange, onBlur, disabled }: {
+  field: { mode?: string };
+  value: unknown;
+  onChange: (v: unknown) => void;
+  onBlur?: () => void;
+  disabled?: boolean;
+}) {
+  const v = (value && typeof value === "object") ? (value as Record<string, unknown>) : {};
+  const mode = field.mode ?? "address-search";
+  const set = (patch: Record<string, unknown>) => onChange({ ...v, ...patch });
+  const inputCls = "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20";
+
+  return (
+    <div className="space-y-2">
+      {mode !== "coordinates" && (
+        <input
+          type="text"
+          placeholder="Search address…"
+          disabled={disabled}
+          value={String(v.address ?? "")}
+          onChange={e => set({ address: e.target.value })}
+          onBlur={onBlur}
+          className={inputCls}
+        />
+      )}
+      {mode !== "address-search" && (
+        <div className="grid grid-cols-2 gap-2">
+          <input
+            type="number" step="any" placeholder="Latitude" disabled={disabled}
+            value={v.lat == null ? "" : String(v.lat)}
+            onChange={e => set({ lat: e.target.value === "" ? null : parseFloat(e.target.value) })}
+            onBlur={onBlur}
+            className={inputCls}
+          />
+          <input
+            type="number" step="any" placeholder="Longitude" disabled={disabled}
+            value={v.lng == null ? "" : String(v.lng)}
+            onChange={e => set({ lng: e.target.value === "" ? null : parseFloat(e.target.value) })}
+            onBlur={onBlur}
+            className={inputCls}
+          />
+        </div>
       )}
     </div>
   );

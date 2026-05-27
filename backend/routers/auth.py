@@ -14,10 +14,10 @@ Contract expected by page.tsx:
 Storage: in-memory dict (swap for a real DB + bcrypt in production).
 Admin seed: admin@formengine.io / Admin@1234
 """
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, HTTPException, Header, Depends
 from pydantic import BaseModel
 from typing import Optional, Dict, List
-import hashlib, secrets, datetime
+import hashlib, hmac, secrets, datetime
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -28,8 +28,27 @@ _users: Dict[str, Dict] = {}
 _sessions: Dict[str, str] = {}
 
 
-def _hash(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
+# ── Password hashing ────────────────────────────────────────────────────────
+# Salted PBKDF2-HMAC-SHA256 (stdlib, no extra dependency). NOT plain SHA-256:
+# unsalted fast hashes are trivially brute-forced. Format:
+#   pbkdf2_sha256$<iterations>$<salt_hex>$<hash_hex>
+_PBKDF2_ITERATIONS = 200_000
+
+def _hash_password(password: str) -> str:
+    salt = secrets.token_bytes(16)
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, _PBKDF2_ITERATIONS)
+    return f"pbkdf2_sha256${_PBKDF2_ITERATIONS}${salt.hex()}${dk.hex()}"
+
+def _verify_password(password: str, stored: str) -> bool:
+    try:
+        algo, iters, salt_hex, hash_hex = stored.split("$")
+        if algo != "pbkdf2_sha256":
+            return False
+        dk = hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt_hex), int(iters))
+        # Constant-time comparison to avoid timing attacks
+        return hmac.compare_digest(dk.hex(), hash_hex)
+    except Exception:
+        return False
 
 def _make_token() -> str:
     return secrets.token_hex(32)
@@ -56,6 +75,16 @@ def _require_admin(authorization: Optional[str]) -> Dict:
     return user
 
 
+# ── FastAPI dependencies (usable from other routers via Depends) ────────────
+def get_current_user(authorization: Optional[str] = Header(default=None)) -> Dict:
+    """Require any authenticated user. Raises 401 otherwise."""
+    return _require_auth(authorization)
+
+def get_current_admin(authorization: Optional[str] = Header(default=None)) -> Dict:
+    """Require an authenticated admin. Raises 401/403 otherwise."""
+    return _require_admin(authorization)
+
+
 # ── Seed admin user ───────────────────────────────────────────────────────────
 
 ADMIN_EMAIL    = "admin@formengine.io"
@@ -66,7 +95,7 @@ def _seed_admin() -> None:
     if ADMIN_EMAIL not in _users:
         _users[ADMIN_EMAIL] = {
             "name": ADMIN_NAME,
-            "password_hash": _hash(ADMIN_PASSWORD),
+            "password_hash": _hash_password(ADMIN_PASSWORD),
             "role": "admin",
             "created_at": datetime.datetime.utcnow().isoformat() + "Z",
         }
@@ -113,7 +142,7 @@ async def signin(body: SigninRequest):
     """Authenticate an existing user and return a session token."""
     email = body.email.lower().strip()
     user  = _users.get(email)
-    if not user or user["password_hash"] != _hash(body.password):
+    if not user or not _verify_password(body.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     token = _make_token()
@@ -155,7 +184,7 @@ async def signup(body: SignupRequest):
     name = (body.full_name or "").strip() or email.split("@")[0]
     _users[email] = {
         "name": name,
-        "password_hash": _hash(body.password),
+        "password_hash": _hash_password(body.password),
         "role": "user",
         "created_at": datetime.datetime.utcnow().isoformat() + "Z",
     }

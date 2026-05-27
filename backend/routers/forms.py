@@ -1,16 +1,31 @@
 """
-Forms CRUD router — stores manifests in SQLite via SQLAlchemy.
+Forms CRUD router — in-memory manifest store (swap for a real DB in production).
+
+Reads (GET) are open so forms can be rendered; write operations
+(create / update / delete / upload) require an authenticated user.
 """
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
 from typing import Dict, List, Any, Optional
-import json, yaml, uuid, datetime
+import json, yaml, uuid, datetime, re
 from ..models.form_schema import FormManifest, CreateFormRequest
+from .auth import get_current_user
 
 router = APIRouter(prefix="/api/forms", tags=["forms"])
 
 # ── In-memory store (swap for DB in production) ──────────────────────────────
 _manifests: Dict[str, Dict[str, Any]] = {}  # manifest_id → raw dict
 _meta: Dict[str, Dict[str, Any]] = {}       # manifest_id → metadata
+
+_MANIFEST_ID_RE = re.compile(r'^[a-z][a-z0-9_]*$')
+
+
+def _validate_manifest_id(manifest_id: str) -> None:
+    """Reject manifest IDs that aren't safe slugs (prevents reflected/path abuse)."""
+    if not manifest_id or not _MANIFEST_ID_RE.match(manifest_id):
+        raise HTTPException(
+            status_code=422,
+            detail="manifest_id must be lowercase letters, numbers and underscores, starting with a letter",
+        )
 
 
 def _manifest_key(manifest_id: str) -> str:
@@ -70,16 +85,18 @@ async def get_form(manifest_id: str, form_id: str):
 
 
 @router.post("/", status_code=201)
-async def create_or_update_manifest(body: Dict[str, Any]):
+async def create_or_update_manifest(body: Dict[str, Any], user: Dict = Depends(get_current_user)):
     """
     Create or update a manifest from a raw JSON/YAML-parsed dict.
-    The dict must conform to FormManifest.
+    The dict must conform to FormManifest. Requires authentication.
     """
     try:
         manifest = FormManifest.model_validate(body)
     except Exception as e:
         raise HTTPException(status_code=422, detail=str(e))
 
+    if manifest.manifest_id:
+        _validate_manifest_id(manifest.manifest_id)
     mid = manifest.manifest_id or str(uuid.uuid4())
     now = datetime.datetime.utcnow().isoformat()
     if mid in _manifests:
@@ -93,8 +110,9 @@ async def create_or_update_manifest(body: Dict[str, Any]):
 
 
 @router.put("/{manifest_id}")
-async def update_manifest(manifest_id: str, body: Dict[str, Any]):
-    """Replace an existing manifest."""
+async def update_manifest(manifest_id: str, body: Dict[str, Any], user: Dict = Depends(get_current_user)):
+    """Replace an existing manifest. Requires authentication."""
+    _validate_manifest_id(manifest_id)
     if manifest_id not in _manifests:
         raise HTTPException(status_code=404, detail="Manifest not found")
     try:
@@ -109,7 +127,8 @@ async def update_manifest(manifest_id: str, body: Dict[str, Any]):
 
 
 @router.delete("/{manifest_id}", status_code=204)
-async def delete_manifest(manifest_id: str):
+async def delete_manifest(manifest_id: str, user: Dict = Depends(get_current_user)):
+    """Delete a manifest. Requires authentication."""
     if manifest_id not in _manifests:
         raise HTTPException(status_code=404, detail="Manifest not found")
     del _manifests[manifest_id]
@@ -117,10 +136,10 @@ async def delete_manifest(manifest_id: str):
 
 
 @router.post("/upload")
-async def upload_manifest(file: UploadFile = File(...)):
+async def upload_manifest(file: UploadFile = File(...), user: Dict = Depends(get_current_user)):
     """
     Upload a YAML or JSON manifest file.
-    Accepts .yaml, .yml, or .json files.
+    Accepts .yaml, .yml, or .json files. Requires authentication.
     """
     raw = await file.read()
     content = raw.decode("utf-8")
@@ -145,6 +164,8 @@ async def upload_manifest(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Schema validation failed: {e}")
 
+    if manifest.manifest_id:
+        _validate_manifest_id(manifest.manifest_id)
     mid = manifest.manifest_id or str(uuid.uuid4())
     now = datetime.datetime.utcnow().isoformat()
     _meta[mid] = {"created_at": now, "updated_at": now}

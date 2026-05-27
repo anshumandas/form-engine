@@ -4,9 +4,9 @@ The API key is read from the ANTHROPIC_API_KEY environment variable.
 No key = graceful error (chatbot shows useful message).
 """
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 from typing import List, Literal, Optional
-import httpx, os, re
+import httpx, os
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
@@ -19,7 +19,8 @@ class ChatMessage(BaseModel):
     role: Literal["user", "assistant"]
     content: str
 
-    @validator("content")
+    @field_validator("content")
+    @classmethod
     def sanitise_content(cls, v: str) -> str:
         # Strip null bytes, limit length
         return v.replace("\x00", "")[:MAX_MSG_LEN]
@@ -29,7 +30,8 @@ class ChatRequest(BaseModel):
     system: Optional[str] = None
     messages: List[ChatMessage]
 
-    @validator("messages")
+    @field_validator("messages")
+    @classmethod
     def limit_messages(cls, v):
         return v[-MAX_MSGS:]  # Keep only latest N messages
 

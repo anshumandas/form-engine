@@ -17,7 +17,7 @@ export async function loadManifest(
   source: string | Record<string, unknown>
 ): Promise<FormManifest> {
   if (typeof source === "object" && source !== null) {
-    return source as FormManifest;
+    return source as unknown as FormManifest;
   }
 
   if (typeof source !== "string") {

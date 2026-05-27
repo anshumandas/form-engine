@@ -8,13 +8,16 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: form-engine-api
+    command: ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     ports:
       - "8000:8000"
     environment:
       - PYTHONUNBUFFERED=1
+      # Pass through from your shell/.env to enable the AI chat feature (optional).
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
     volumes:
-      - ./backend:/app
-      - ./backend/sample_forms:/app/sample_forms:ro
+      # Mounted as a package dir so `backend.main:app` + --reload work in dev.
+      - ./backend:/app/backend
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s

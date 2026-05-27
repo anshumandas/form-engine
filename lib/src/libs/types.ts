@@ -24,7 +24,7 @@ export interface EngineConfig {
 // ─── Conditions ───────────────────────────────────────────────────────────────
 export type ConditionOp =
   | "eq" | "neq" | "in" | "not_in" | "gt" | "gte" | "lt" | "lte"
-  | "contains" | "starts_with" | "is_empty" | "is_not_empty"
+  | "contains" | "starts_with" | "ends_with" | "is_empty" | "is_not_empty"
   | "is_true" | "is_false";
 
 export interface SimpleCondition {
@@ -465,6 +465,13 @@ export interface FormDef {
   pages?: Page[];
   sections?: Section[];
   on_submit?: SubmitAction;
+  /**
+   * When false, the built-in "🎉 success" screen is NOT shown after a successful
+   * submit. Instead the form stays mounted and the caller's onSubmit handler is
+   * responsible for the next step (e.g. redirect after a server response).
+   * Used by signin/signup forms. Defaults to true.
+   */
+  show_success_screen?: boolean;
 }
 
 // ─── Data Sources ─────────────────────────────────────────────────────────────

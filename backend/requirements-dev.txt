@@ -1,0 +1,4 @@
+# Test/dev dependencies (install on top of requirements.txt)
+-r requirements.txt
+pytest==8.2.2
+pytest-cov==5.0.0

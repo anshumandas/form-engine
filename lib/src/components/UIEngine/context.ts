@@ -29,6 +29,7 @@ import {
   ThemeDefinition,
   ResolvedAuth,
 } from "./types";
+import { evaluateComputed } from "../../libs/condition-evaluator";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CUSTOM COMPONENT REGISTRY TYPE
@@ -386,20 +387,14 @@ export function useConditionEvaluator() {
       if (!condition) return true;
 
       // ── String expression (e.g. "context.mode !== 'signin'") ──────────────
+      // Evaluated with the SAST-safe interpreter (no eval / no new Function).
+      // `context.*` resolves against engineContext and `fields.*` against
+      // componentStates. This keeps the "zero eval" security guarantee intact
+      // and removes the need for `unsafe-eval` in the CSP.
       if (typeof condition === "string") {
-        try {
-          // `context` = engineContext, `state` = componentStates
-          // eslint-disable-next-line no-new-func
-          const fn = new Function(
-            "context",
-            "state",
-            `"use strict"; return !!(${condition});`
-          );
-          return fn(engineContext ?? {}, state.componentStates ?? {});
-        } catch (err) {
-          console.warn("[UIEngine] Failed to evaluate condition:", condition, err);
-          return true;
-        }
+        const states = (state.componentStates ?? {}) as Record<string, unknown>;
+        const ctx = (engineContext ?? {}) as Record<string, unknown>;
+        return Boolean(evaluateComputed(condition, states, ctx));
       }
 
       // ── Named condition ref (manifest.conditions[ref]) ────────────────────

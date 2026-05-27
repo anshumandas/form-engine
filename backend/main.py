@@ -283,7 +283,7 @@ async def seed_sample_data():
     _wrap_choices(SAMPLE_MANIFEST)
     _manifests[mid] = SAMPLE_MANIFEST
     _meta[mid] = {"created_at": now, "updated_at": now}
-    print(f"✅ Seeded manifest: {mid}")
+    print(f"[seed] Manifest: {mid}")
 
 
 if __name__ == "__main__":
@@ -312,6 +312,6 @@ async def seed_sample_files():
             _manifests[mid]["_category_name"] = mid.replace("_", " ").title()
             _meta[mid] = {"created_at": datetime.datetime.utcnow().isoformat(),
                           "updated_at": datetime.datetime.utcnow().isoformat()}
-            print(f"  ✅ Seeded sample: {mid}")
+            print(f"  [seed] sample: {mid}")
         except Exception as e:
-            print(f"  ⚠ Skipped {f.name}: {e}")
+            print(f"  [seed] skipped {f.name}: {e}")

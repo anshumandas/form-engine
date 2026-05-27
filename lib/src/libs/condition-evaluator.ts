@@ -53,6 +53,7 @@ function evalSimple(cond: SimpleCondition, fields: FieldAnswers): boolean {
     case "not_in":      return Array.isArray(cmp) && !cmp.includes(val);
     case "contains":    return typeof val === "string" && val.includes(String(cmp));
     case "starts_with": return typeof val === "string" && val.startsWith(String(cmp));
+    case "ends_with":   return typeof val === "string" && val.endsWith(String(cmp));
     case "is_empty":    return val == null || val === "" || (Array.isArray(val) && val.length === 0);
     case "is_not_empty":return !(val == null || val === "" || (Array.isArray(val) && val.length === 0));
     case "is_true":     return val === true;
@@ -335,11 +336,17 @@ export function validateField(field: FormField, value: unknown, allValues: Field
   const errors: string[] = [];
   const isEmpty = value == null || value === "" || (Array.isArray(value) && value.length === 0);
 
-  if (field.required && isEmpty) {
-    errors.push(`${field.label || field.id} is required`);
+  if (isEmpty) {
+    if (field.required) {
+      errors.push(`${field.label || field.id} is required`);
+    } else {
+      // A rule-based `required` must still fire on empty values.
+      for (const rule of (field.validation?.rules ?? [])) {
+        if (rule.type === "required") errors.push(rule.message || `${field.label || field.id} is required`);
+      }
+    }
     return errors;
   }
-  if (isEmpty) return errors;
 
   const f = field as unknown as Record<string, unknown>;
 

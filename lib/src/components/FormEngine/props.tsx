@@ -11,7 +11,7 @@ import { FormErrorBoundary } from "./FormErrorBoundary";
 import { FormEngine as FormEngineInner, FieldRouter } from "./index";
 export { FieldRouter };
 
-import type { FormManifest, FieldAnswers, FormContext, FormSubmissionResponse } from "/libs/types";
+import type { FormManifest, FieldAnswers, FormContext, FormSubmissionResponse } from "../../libs/types";
 
 interface SafeFormEngineProps {
   manifest: FormManifest;
@@ -21,6 +21,8 @@ interface SafeFormEngineProps {
   onSubmit?: (payload: FieldAnswers, response?: FormSubmissionResponse) => Promise<void> | void;
   onDraftSave?: (answers: FieldAnswers) => Promise<void> | void;
   readOnly?: boolean;
+  /** See FormEngine: when false, suppresses the built-in success screen. */
+  showSuccessScreen?: boolean;
 }
 
 export function SafeFormEngine(props: SafeFormEngineProps) {

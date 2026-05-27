@@ -715,6 +715,9 @@ class FormDef(BaseModel):
     pages: Optional[List[Page]] = None
     sections: Optional[List[Section]] = None
     on_submit: Optional[SubmitAction] = None
+    # When False, the client form engine suppresses its built-in success screen
+    # (used by signin/signup forms that redirect on a successful server response).
+    show_success_screen: Optional[bool] = None
     theme_ref: Optional[str] = None  # key from manifest "themes"
 
 

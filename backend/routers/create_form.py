@@ -2,13 +2,14 @@
 /api/create-form — transforms form_creator answers into a FormManifest
 and registers it via the in-memory store.
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Any, Dict, List, Optional
 import uuid, datetime, re
 
 from ..models.form_schema import FormManifest
 from .forms import _manifests, _meta
+from .auth import get_current_user
 
 router = APIRouter(prefix="/api", tags=["create-form"])
 
@@ -115,10 +116,11 @@ def _build_section(fields: List[Dict[str, Any]], section_id: str = "main", title
 
 
 @router.post("/create-form")
-async def create_form(body: Dict[str, Any]):
+async def create_form(body: Dict[str, Any], user: Dict = Depends(get_current_user)):
     """
     Accepts raw form_creator answers, constructs a FormManifest, validates it,
     and registers it. Returns the manifest_id and form_id for redirect.
+    Requires authentication.
     """
     # Normalise — the request body is the flat answers dict from the form engine
     payload = CreateFormPayload(

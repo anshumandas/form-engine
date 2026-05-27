@@ -9,7 +9,7 @@
  * Usage:
  *   const { answers, setAnswer, errors, submit } = useFormEngine();
  */
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { useFormEngineStore } from "../store/form-engine-store";
 import { getConfig } from "../libs/config";
 import type { FieldAnswers, FormContext, FormManifest } from "../libs/types";
@@ -148,9 +148,16 @@ export function useFormEngineInit(
 ) {
   const init = useFormEngineStore(s => s.init);
 
-  if (manifest && formId) {
-    void (() => init(manifest, formId, options?.initialAnswers, options?.context))();
-  }
+  // Initialise inside an effect — never during render. Calling the store's
+  // `set` during render triggers React "update during render" warnings and
+  // would reset in-progress answers on every parent re-render. Re-init only
+  // when the form identity (manifest id + formId) changes.
+  useEffect(() => {
+    if (manifest && formId) {
+      init(manifest, formId, options?.initialAnswers, options?.context);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manifest?.manifest_id, formId]);
 
   return useFormEngineStore();
 }

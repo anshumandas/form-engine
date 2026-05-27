@@ -71,6 +71,9 @@ export const authUIManifest: UISystemManifest = {
         },
       ],
       on_submit: { type: "local", handler_name: "handleSignin" },
+      // Auth forms must NOT show the built-in success screen — the submit
+      // waits for the server response and the handler redirects on success.
+      show_success_screen: false,
     },
 
     signup: {
@@ -91,6 +94,8 @@ export const authUIManifest: UISystemManifest = {
         },
       ],
       on_submit: { type: "local", handler_name: "handleSignup" },
+      // See signin: suppress success screen, wait for server response.
+      show_success_screen: false,
     },
   },
 

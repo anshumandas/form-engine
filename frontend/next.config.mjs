@@ -7,6 +7,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const nextConfig = {
   reactStrictMode: true,
 
+  // Emit a self-contained server bundle (.next/standalone) — required by the
+  // multi-stage frontend Dockerfile, which copies .next/standalone + static.
+  output: "standalone",
+
   // ── Webpack config for path aliases ─────────────────────────────────────────
   webpack: (config) => {
     config.resolve.alias = {
@@ -34,7 +38,12 @@ const nextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+              // 'unsafe-eval' is only needed by the dev server (React Refresh /
+              // webpack). The app's own condition evaluator is eval-free, so we
+              // drop it in production builds to honour the "no unsafe-eval" policy.
+              process.env.NODE_ENV === "production"
+                ? "script-src 'self' 'unsafe-inline'"
+                : "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob:",
               "font-src 'self' data:",

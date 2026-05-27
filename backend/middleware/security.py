@@ -1,6 +1,5 @@
 """Security middleware — SAST/OWASP compliance."""
 import re
-from urllib import response
 from fastapi import Request
 from fastapi.responses import Response
 from starlette.middleware.base import BaseHTTPMiddleware

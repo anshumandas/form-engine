@@ -3,12 +3,13 @@
 Lets the UI create, rename, and list categories (manifests) without needing
 to know YAML.
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Dict
 import datetime, re
 
 from .forms import _manifests, _meta
+from .auth import get_current_user
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
 
@@ -37,8 +38,8 @@ async def list_categories():
 
 
 @router.post("/", status_code=201)
-async def create_category(body: CreateCategoryRequest):
-    """Create a new empty category (manifest)."""
+async def create_category(body: CreateCategoryRequest, user: Dict = Depends(get_current_user)):
+    """Create a new empty category (manifest). Requires authentication."""
     cid = body.category_id.strip()
 
     if not re.match(r'^[a-z][a-z0-9_]*$', cid):
@@ -67,8 +68,8 @@ async def create_category(body: CreateCategoryRequest):
 
 
 @router.patch("/{category_id}")
-async def rename_category(category_id: str, body: CreateCategoryRequest):
-    """Rename a category."""
+async def rename_category(category_id: str, body: CreateCategoryRequest, user: Dict = Depends(get_current_user)):
+    """Rename a category. Requires authentication."""
     if category_id not in _manifests:
         raise HTTPException(status_code=404, detail="Category not found")
     _manifests[category_id]["_category_name"]        = body.name.strip()

@@ -1,13 +1,14 @@
 """
 Submissions router — handles form submissions, drafts, and validation.
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from typing import Dict, List, Any, Optional
 import uuid, datetime
 
 from ..models.form_schema import FormSubmission, FormSubmissionResponse, ValidationRule
 from ..services.condition_evaluator import evaluate_condition, filter_visible_fields
 from .forms import _manifests
+from .auth import get_current_user
 
 router = APIRouter(prefix="/api/submissions", tags=["submissions"])
 
@@ -25,12 +26,15 @@ def _validate_field(field: Dict[str, Any], value: Any, answers: Dict[str, Any]) 
 
     # Required check
     is_empty = value is None or value == "" or value == [] or value == {}
-    if required and is_empty:
-        errors.append(field.get("validation_message") or f"{field.get('label', field.get('id'))} is required")
-        return errors  # No point checking further if empty
-
     if is_empty:
-        return errors
+        if required:
+            errors.append(field.get("validation_message") or f"{field.get('label', field.get('id'))} is required")
+        else:
+            # A rule-based `required` must still fire on empty values.
+            for rule in ((field.get("validation", {}) or {}).get("rules", []) or []):
+                if rule.get("type") == "required":
+                    errors.append(rule.get("message") or f"{field.get('label', field.get('id'))} is required")
+        return errors  # No point checking other constraints on an empty value
 
     # Type-specific validation
     if field_type == "text":
@@ -194,8 +198,12 @@ async def submit_form(submission: FormSubmission):
 
 
 @router.get("/")
-async def list_submissions(form_id: Optional[str] = None, manifest_id: Optional[str] = None):
-    """List all submissions, optionally filtered by form_id or manifest_id."""
+async def list_submissions(
+    form_id: Optional[str] = None,
+    manifest_id: Optional[str] = None,
+    user: Dict = Depends(get_current_user),
+):
+    """List submissions, optionally filtered by form_id or manifest_id. Requires auth."""
     subs = list(_submissions.values())
     if form_id:
         subs = [s for s in subs if s["form_id"] == form_id]
@@ -205,14 +213,14 @@ async def list_submissions(form_id: Optional[str] = None, manifest_id: Optional[
 
 
 @router.get("/{submission_id}")
-async def get_submission(submission_id: str):
+async def get_submission(submission_id: str, user: Dict = Depends(get_current_user)):
     if submission_id not in _submissions:
         raise HTTPException(status_code=404, detail="Submission not found")
     return _submissions[submission_id]
 
 
 @router.get("/drafts/{manifest_id}/{form_id}")
-async def get_draft(manifest_id: str, form_id: str):
+async def get_draft(manifest_id: str, form_id: str, user: Dict = Depends(get_current_user)):
     key = f"{manifest_id}:{form_id}"
     if key not in _drafts:
         raise HTTPException(status_code=404, detail="No draft found")

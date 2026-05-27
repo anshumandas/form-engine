@@ -11,6 +11,7 @@ import {
   Button,
   ConditionOrRef,
 } from '../components/UIEngine/types';
+import { evaluateComputed } from '../libs/condition-evaluator';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MANIFEST VALIDATION
@@ -277,10 +278,10 @@ export function evaluateSimpleCondition(
   if (!condition) return true;
 
   try {
-    // Simple string-based condition evaluation
-    // For production, use a library like jexl, expr-eval, or similar
-    const conditionFn = new Function(...Object.keys(context), `return ${condition}`);
-    return Boolean(conditionFn(...Object.values(context)));
+    // SAST-safe: no eval / no new Function. The interpreter resolves
+    // `context.*` and `fields.*` references; bare identifiers used in a
+    // condition map onto the supplied context object.
+    return Boolean(evaluateComputed(condition, context, context));
   } catch (e) {
     console.warn('Failed to evaluate condition:', condition, e);
     return true;
