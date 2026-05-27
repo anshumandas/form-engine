@@ -26,6 +26,18 @@ data_sources:
     value_key: teamId
     label_key: name
     cache_ttl_seconds: 120
+  principals_source:
+    type: rest
+    description: 'Combined directory of Users and Teams. Used wherever a relationship
+      can target either kind of principal (e.g. team membership). Each row is
+      namespaced as user:<id> or team:<id> so the value alone identifies the kind.
+
+      '
+    endpoint: /api/uam/principals
+    value_key: principalId
+    label_key: label
+    search_param: q
+    cache_ttl_seconds: 120
   roles_source:
     type: rest
     description: All roles for relationship pickers.
@@ -364,17 +376,24 @@ forms:
         max_length: 1000
     - id: team_members
       title: Members
-      description: Users who are direct members of this team.
+      description: 'Users or sub-teams that are direct members of this team. Type
+        to search the combined directory.
+
+        '
       fields:
       - id: members
         type: multiselect
         label: Members
-        hint: Search and select users to add as members.
+        hint: 'Type a name to search Users and Teams. Each entry is stored as
+          user:<id> or team:<id> so the kind is preserved alongside the id.
+
+          '
         choices:
-          source_ref: users_source
+          source_ref: principals_source
         display_as: dropdown
         tags:
           relationship: members
+          accepts_kinds: user,team
     - id: sub_teams_section
       title: Sub-Teams
       description: Teams that report under or are part of this team.

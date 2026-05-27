@@ -7,6 +7,7 @@ import type {
   StaticChoice,
 } from "../../../libs/types";
 import { cn } from "../../../libs/utils";
+import { useFormEngineStore } from "../../../store/form-engine-store";
 
 // ─── Dynamic choices config (mirrors DynamicChoicesConfig in schema) ──────────
 interface DynamicChoicesConfig {
@@ -104,12 +105,35 @@ function resolveStaticChoices(choices: unknown): StaticChoice[] {
 }
 
 /**
- * Extract the DynamicChoicesConfig from a field's `choices` prop, if present.
+ * Hook: returns the manifest's `data_sources` map for source_ref resolution.
+ * Stable identity per render — safe to use in dependency arrays via key fields.
  */
-function getDynamicConfig(choices: unknown): DynamicChoicesConfig | null {
+function useDataSources(): Record<string, DynamicChoicesConfig> {
+  return useFormEngineStore(
+    (s) => (s.manifest?.data_sources as Record<string, DynamicChoicesConfig> | undefined) ?? {}
+  );
+}
+
+/**
+ * Extract the DynamicChoicesConfig from a field's `choices` prop.
+ * Supports both `{ dynamic: {...} }` and `{ source_ref: "name" }` — the latter
+ * is resolved against the manifest's top-level `data_sources` map.
+ */
+function getDynamicConfig(
+  choices: unknown,
+  dataSources: Record<string, DynamicChoicesConfig>
+): DynamicChoicesConfig | null {
   if (!choices || Array.isArray(choices)) return null;
   const c = choices as Record<string, unknown>;
   if (c.dynamic && typeof c.dynamic === "object") return c.dynamic as DynamicChoicesConfig;
+  if (typeof c.source_ref === "string") {
+    const src = dataSources[c.source_ref];
+    if (!src) return null;
+    const endpoint = (src as unknown as { endpoint?: string; url?: string }).endpoint
+                  ?? (src as unknown as { url?: string }).url;
+    if (!endpoint) return null;
+    return { ...src, url: endpoint };
+  }
   return null;
 }
 
@@ -395,7 +419,8 @@ export function NumberFieldRenderer({ field, value, onChange, onBlur, errors, di
 // ─── Select Field ─────────────────────────────────────────────────────────────
 export function SelectFieldRenderer({ field, value, onChange, onBlur, errors, disabled }: FieldProps<SelectField>) {
   const f = field as SelectField;
-  const dynamicConfig = getDynamicConfig(f.choices);
+  const dataSources = useDataSources();
+  const dynamicConfig = getDynamicConfig(f.choices, dataSources);
   const { choices: dynamicChoices, loading, error: fetchError } = useDynamicChoices(dynamicConfig);
   const staticChoices = resolveStaticChoices(f.choices);
   const choices = dynamicConfig ? dynamicChoices : staticChoices;
@@ -512,11 +537,15 @@ export function SelectFieldRenderer({ field, value, onChange, onBlur, errors, di
 // ─── Multiselect Field ────────────────────────────────────────────────────────
 export function MultiselectFieldRenderer({ field, value, onChange, errors, disabled }: FieldProps<MultiselectField>) {
   const f = field as MultiselectField;
-  const dynamicConfig = getDynamicConfig(f.choices);
+  const dataSources = useDataSources();
+  const dynamicConfig = getDynamicConfig(f.choices, dataSources);
   const { choices: dynamicChoices, loading: dynLoading, error: dynError } = useDynamicChoices(dynamicConfig);
   const choices = dynamicConfig ? dynamicChoices : resolveStaticChoices(f.choices);
   const selected: (string | number)[] = Array.isArray(value) ? (value as (string | number)[]) : [];
-  const displayAs = f.display_as ?? "auto";
+  // Dynamic dropdown defaults to type-to-search dropdown; static defaults to checkboxes.
+  const displayAs = f.display_as && f.display_as !== "auto"
+    ? f.display_as
+    : (dynamicConfig ? "dropdown" : "checkbox");
 
   const toggle = (v: string | number) => {
     if (selected.includes(v)) onChange(selected.filter(x => x !== v));
@@ -574,6 +603,24 @@ export function MultiselectFieldRenderer({ field, value, onChange, errors, disab
     );
   }
 
+  if (displayAs === "dropdown") {
+    return (
+      <FieldWrapper label={f.label} required={f.required} hint={f.hint}
+        description={f.description} errors={errors} width={f.width}>
+        <MultiselectDropdown
+          choices={choices}
+          selected={selected}
+          onToggle={toggle}
+          disabled={disabled || f.disabled}
+          maxSelected={f.max_selected}
+          allowOthers={f.allow_others}
+          placeholder={f.placeholder}
+          hasError={!!errors?.length}
+        />
+      </FieldWrapper>
+    );
+  }
+
   // Default: checkboxes
   return (
     <FieldWrapper label={f.label} required={f.required} hint={f.hint}
@@ -594,6 +641,142 @@ export function MultiselectFieldRenderer({ field, value, onChange, errors, disab
         ))}
       </div>
     </FieldWrapper>
+  );
+}
+
+// ─── Multiselect Dropdown subcomponent (type-to-search combobox) ──────────────
+interface MultiselectDropdownProps {
+  choices: StaticChoice[];
+  selected: (string | number)[];
+  onToggle: (v: string | number) => void;
+  disabled?: boolean;
+  maxSelected?: number;
+  allowOthers?: boolean;
+  placeholder?: string;
+  hasError?: boolean;
+}
+
+function MultiselectDropdown({
+  choices, selected, onToggle, disabled, maxSelected, allowOthers, placeholder, hasError,
+}: MultiselectDropdownProps) {
+  const [query, setQuery] = React.useState("");
+  const [open, setOpen] = React.useState(false);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  const selectedSet = new Set(selected.map(String));
+  const q = query.trim().toLowerCase();
+  const filtered = choices.filter(c =>
+    !selectedSet.has(String(c.value)) &&
+    (!q || c.label.toLowerCase().includes(q) || String(c.value).toLowerCase().includes(q))
+  );
+  const atMax = maxSelected != null && selected.length >= maxSelected;
+  const hasExactMatch = choices.some(c =>
+    c.label.toLowerCase() === q || String(c.value).toLowerCase() === q
+  );
+  const canAddOther = allowOthers && q.length > 0 && !hasExactMatch && !selectedSet.has(q);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-1.5 px-2 py-1.5 rounded-lg border bg-white min-h-[42px] cursor-text",
+          "border-gray-300 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20",
+          "dark:border-gray-600 dark:bg-gray-800",
+          hasError && "border-red-400",
+          disabled && "opacity-60 cursor-not-allowed"
+        )}
+        onClick={() => !disabled && setOpen(true)}
+      >
+        {selected.map(v => {
+          const choice = choices.find(c => String(c.value) === String(v));
+          return (
+            <span key={String(v)} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300">
+              {choice?.label ?? String(v)}
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onToggle(v); }}
+                disabled={disabled}
+                className="hover:text-red-600 ml-0.5 leading-none"
+                aria-label={`Remove ${choice?.label ?? v}`}
+              >×</button>
+            </span>
+          );
+        })}
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === "Backspace" && query === "" && selected.length > 0) {
+              onToggle(selected[selected.length - 1]);
+            } else if (e.key === "Enter") {
+              e.preventDefault();
+              if (filtered.length > 0 && !atMax) {
+                onToggle(filtered[0].value as string);
+                setQuery("");
+              } else if (canAddOther && !atMax) {
+                onToggle(query.trim());
+                setQuery("");
+              }
+            } else if (e.key === "Escape") {
+              setOpen(false);
+            }
+          }}
+          disabled={disabled || atMax}
+          placeholder={selected.length === 0 ? (placeholder ?? "Type to search…") : ""}
+          className="flex-1 min-w-[8ch] bg-transparent outline-none text-sm placeholder:text-gray-400 dark:text-gray-100"
+        />
+        <span className="pointer-events-none text-gray-400 text-xs">▾</span>
+      </div>
+
+      {open && !disabled && (
+        <div className="absolute z-10 mt-1 w-full max-h-60 overflow-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg">
+          {atMax && (
+            <div className="px-3 py-2 text-xs text-amber-600">Maximum {maxSelected} selected.</div>
+          )}
+          {!atMax && filtered.length === 0 && !canAddOther && (
+            <div className="px-3 py-2 text-sm text-gray-400">
+              {q ? "No matches" : selected.length === choices.length ? "All selected" : "Start typing…"}
+            </div>
+          )}
+          {!atMax && filtered.map(choice => (
+            <button
+              key={String(choice.value)}
+              type="button"
+              disabled={choice.disabled}
+              onClick={() => { onToggle(choice.value as string); setQuery(""); }}
+              className={cn(
+                "w-full text-left px-3 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center justify-between gap-2",
+                choice.disabled && "opacity-40 cursor-not-allowed"
+              )}
+            >
+              <span>{choice.label}</span>
+              {choice.group && (
+                <span className="text-[10px] uppercase tracking-wider text-gray-400">{choice.group}</span>
+              )}
+            </button>
+          ))}
+          {!atMax && canAddOther && (
+            <button
+              type="button"
+              onClick={() => { onToggle(query.trim()); setQuery(""); }}
+              className="w-full text-left px-3 py-2 text-sm text-blue-700 hover:bg-blue-50 border-t border-gray-100 dark:border-gray-700"
+            >
+              + Add "{query.trim()}"
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

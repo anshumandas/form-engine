@@ -1,0 +1,531 @@
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  travel_insurance.yaml — UISystemManifest v1.0.0                            ║
+# ║  Branching showcase: fields and sections that appear based on prior answers ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+#
+# This sample is a deliberate demo of conditional rendering. Almost every
+# section after the first is hidden until the user makes a specific choice
+# above it. Patterns demonstrated:
+#
+#   • Named conditions reused across multiple fields / sections (DRY branching)
+#   • Boolean → reveal section          (op: is_true)
+#   • Select  → reveal one of N sections (op: eq, one value per branch)
+#   • Number  → reveal section          (op: gte)
+#   • Multiselect → reveal field        (op: contains)
+#   • Composite branches                (all / any)
+#   • Expression-based branching        (fields.x && fields.y > 0)
+#   • Inline (un-named) field-level conditions
+#   • Nested branching: a section is conditional, AND fields inside it
+#     have their own further conditions
+#
+# Try filling it top-to-bottom to watch the form reshape itself.
+
+manifest_id: travel_insurance
+manifest_version: "1.0.0"
+description: >
+  Travel-insurance quote form built to showcase conditional rendering
+  (branching). Sections and fields appear, disappear, or change based on
+  the user's earlier answers.
+
+namespaces: [core, schemata, uam, form, ui]
+
+engine:
+  mode: reactive
+  evaluation_order: dependency
+  error_mode: collect-all
+  debounce_ms: 200
+
+# ── Named conditions ─────────────────────────────────────────────────────────
+# Defined once here, referenced via `condition: { ref: <name> }` below.
+conditions:
+
+  is_single_trip:
+    description: User chose a one-off trip
+    condition: { field: trip_type, op: eq, value: single }
+
+  is_annual_multi:
+    description: User chose an annual multi-trip policy
+    condition: { field: trip_type, op: eq, value: annual_multi }
+
+  is_business_trip:
+    description: User chose a business trip
+    condition: { field: trip_type, op: eq, value: business }
+
+  is_international:
+    description: Destination is outside the home country
+    condition: { field: destination_region, op: neq, value: domestic }
+
+  is_high_risk_region:
+    description: Region flagged for elevated medical / security risk
+    condition:
+      field: destination_region
+      op: in
+      value: [africa, middle_east, south_america]
+
+  needs_vaccination_advice:
+    description: International AND high-risk → show vaccination guidance
+    all:
+      - { ref: is_international }
+      - { ref: is_high_risk_region }
+
+  does_adventure_activities:
+    description: User ticked the adventure-activities box
+    condition: { field: does_adventure, op: is_true }
+
+  has_extreme_activity:
+    description: Selected activity list contains an extreme sport
+    any:
+      - { field: adventure_activities, op: contains, value: skydiving }
+      - { field: adventure_activities, op: contains, value: base_jumping }
+      - { field: adventure_activities, op: contains, value: heli_skiing }
+
+  has_preexisting_conditions:
+    description: User declared a pre-existing medical condition
+    condition: { field: has_medical_conditions, op: is_true }
+
+  is_senior:
+    description: Lead traveller is 65 or older
+    condition: { field: lead_age, op: gte, value: 65 }
+
+  needs_medical_review:
+    description: Senior OR pre-existing → trigger medical review
+    any:
+      - { ref: is_senior }
+      - { ref: has_preexisting_conditions }
+
+  travelling_with_others:
+    description: Party size greater than 1
+    expression: "fields.travellers_count > 1"
+
+  has_minors:
+    description: Multi-traveller party that includes children
+    expression: "fields.travellers_count > 1 && fields.includes_minors == true"
+
+  is_premium_tier:
+    description: Premium coverage selected — unlock add-ons
+    condition: { field: coverage_tier, op: eq, value: premium }
+
+  should_nudge_upgrade:
+    description: Basic tier + any elevated risk → suggest upgrade
+    all:
+      - { field: coverage_tier, op: eq, value: basic }
+      - any:
+          - { ref: has_extreme_activity }
+          - { ref: needs_medical_review }
+          - { ref: is_high_risk_region }
+
+
+forms:
+  # ── Single form: travel_insurance ─────────────────────────────────────────
+  travel_insurance:
+    title: Travel Insurance Quote
+    description: >
+      Answer the questions below — extra sections will appear as needed
+      based on your responses. This form demonstrates conditional rendering
+      (branching) end-to-end.
+    version: "1.0.0"
+    form_state: active
+    confidentiality: Internal
+    access:
+      allowed_role_categories: [Customer, Employee, Partner]
+    layout:
+      type: single-page
+    submit_label: Get My Quote
+    draft_label: Save for Later
+    state:
+      persistence: localStorage
+      auto_save: true
+      draft_key: travel_insurance_draft
+    on_submit:
+      type: none
+      success_message: "✅ Quote request received — we'll email it within 60 seconds."
+
+    sections:
+
+      # ── 1. Trip type (the master branch) ─────────────────────────────────
+      - id: trip_basics
+        title: 1. Tell us about your trip
+        description: >
+          Your answer here determines which sections appear below.
+        fields:
+          - id: trip_type
+            type: select
+            label: What kind of policy do you need?
+            required: true
+            display_as: button-group
+            choices:
+              static:
+                - { value: single,        label: "✈️ Single trip" }
+                - { value: annual_multi,  label: "🔁 Annual multi-trip" }
+                - { value: business,      label: "💼 Business trip" }
+
+      # ── 2a. Single-trip dates (branch: trip_type == single) ──────────────
+      - id: single_trip_dates
+        title: Single-trip dates
+        condition: { ref: is_single_trip }
+        fields:
+          - id: departure_date
+            type: date
+            label: Departure Date
+            required: true
+            width: half
+            min_date: today
+          - id: return_date
+            type: date
+            label: Return Date
+            required: true
+            width: half
+            min_date: today
+
+      # ── 2b. Annual multi-trip details (branch: trip_type == annual_multi)
+      - id: annual_multi_details
+        title: Annual multi-trip details
+        condition: { ref: is_annual_multi }
+        fields:
+          - id: annual_start_date
+            type: date
+            label: Cover Start Date
+            required: true
+            width: half
+            min_date: today
+          - id: max_trip_length_days
+            type: number
+            label: Max length of any single trip (days)
+            required: true
+            width: half
+            min: 1
+            max: 90
+            number_type: int
+            default: 30
+            display_as: stepper
+
+      # ── 2c. Business-trip details (branch: trip_type == business) ────────
+      - id: business_trip_details
+        title: Business-trip details
+        condition: { ref: is_business_trip }
+        fields:
+          - id: company_name
+            type: text
+            label: Company Name
+            required: true
+            width: half
+          - id: cost_centre
+            type: text
+            label: Cost Centre / PO Number
+            width: half
+          - id: business_purpose
+            type: select
+            label: Purpose of travel
+            required: true
+            choices:
+              static:
+                - { value: conference,  label: Conference / Event }
+                - { value: client_mtg,  label: Client meeting }
+                - { value: training,    label: Training }
+                - { value: site_visit,  label: Site visit }
+                - { value: other,       label: Other }
+
+      # ── 3. Destination ───────────────────────────────────────────────────
+      - id: destination
+        title: 2. Destination
+        condition:
+          # Show only once trip type is chosen — uses an inline expression,
+          # not a named condition, to demonstrate that pattern.
+          expression: "fields.trip_type != null"
+        fields:
+          - id: destination_region
+            type: select
+            label: Where are you going?
+            required: true
+            choices:
+              static:
+                - { value: domestic,      label: "🏠 Domestic" }
+                - { value: europe,        label: "🇪🇺 Europe" }
+                - { value: north_america, label: "🌎 North America" }
+                - { value: south_america, label: "🌎 South America" }
+                - { value: asia,          label: "🌏 Asia" }
+                - { value: africa,        label: "🌍 Africa" }
+                - { value: middle_east,   label: "🕌 Middle East" }
+                - { value: oceania,       label: "🦘 Oceania / Pacific" }
+
+          # Field-level inline condition: passport only matters for international
+          - id: passport_number
+            type: text
+            label: Passport Number
+            condition: { ref: is_international }
+            width: half
+            placeholder: "e.g. J1234567"
+
+          - id: passport_expiry
+            type: date
+            label: Passport Expiry
+            condition: { ref: is_international }
+            width: half
+
+      # ── 4. Vaccination advice (composite branch: international + high-risk)
+      - id: vaccination_advice
+        title: Health & vaccination notice
+        description: >
+          Your destination region is flagged for elevated health risk.
+          Please confirm the items below before we issue cover.
+        condition: { ref: needs_vaccination_advice }
+        fields:
+          - id: vaccinations_up_to_date
+            type: boolean
+            label: My routine vaccinations are up to date
+            required: true
+            display_as: checkbox
+          - id: travel_clinic_visited
+            type: boolean
+            label: I have (or will) consult a travel-health clinic before departure
+            required: true
+            display_as: checkbox
+
+      # ── 5. Adventure activities (boolean → reveal) ───────────────────────
+      - id: activities
+        title: 3. Activities
+        fields:
+          - id: does_adventure
+            type: boolean
+            label: Will you be doing any adventure activities?
+            display_as: switch
+            default: false
+
+      - id: adventure_details
+        title: Tell us which activities
+        condition: { ref: does_adventure_activities }
+        fields:
+          - id: adventure_activities
+            type: multiselect
+            label: Select all that apply
+            required: true
+            display_as: checkbox
+            choices:
+              static:
+                - { value: hiking,        label: Hiking / Trekking }
+                - { value: scuba,         label: Scuba diving }
+                - { value: skiing,        label: Skiing / Snowboarding }
+                - { value: surfing,       label: Surfing }
+                - { value: skydiving,     label: Skydiving }
+                - { value: base_jumping,  label: BASE jumping }
+                - { value: heli_skiing,   label: Heli-skiing }
+                - { value: mountaineering,label: Mountaineering (>4000m) }
+
+      # ── 5b. Extreme-sports waiver — nested branch: adventure AND extreme ─
+      - id: extreme_waiver
+        title: Extreme-sports waiver
+        description: >
+          You selected an activity that requires an additional waiver.
+        condition:
+          all:
+            - { ref: does_adventure_activities }
+            - { ref: has_extreme_activity }
+        fields:
+          - id: waiver_signed
+            type: boolean
+            label: I understand extreme-sport claims require an additional rider
+            required: true
+            display_as: checkbox
+
+          # Nested: only show when waiver_signed is true
+          - id: instructor_certified
+            type: boolean
+            label: I will be supervised by a certified instructor / operator
+            condition: { field: waiver_signed, op: is_true }
+            display_as: checkbox
+
+      # ── 6. Traveller details ─────────────────────────────────────────────
+      - id: traveller_info
+        title: 4. Lead traveller
+        fields:
+          - id: lead_name
+            type: text
+            label: Full Name (as on passport)
+            required: true
+            width: half
+          - id: lead_age
+            type: number
+            label: Age
+            required: true
+            width: half
+            min: 0
+            max: 120
+            number_type: int
+            display_as: stepper
+
+          - id: has_medical_conditions
+            type: boolean
+            label: Do you have any pre-existing medical conditions?
+            display_as: yes-no-radio
+            default: false
+
+      # ── 6b. Medical questionnaire (branch: has_medical_conditions) ───────
+      - id: medical_questionnaire
+        title: Medical questionnaire
+        condition: { ref: has_preexisting_conditions }
+        fields:
+          - id: medical_conditions_list
+            type: multiselect
+            label: Please indicate any conditions you have
+            display_as: checkbox
+            allow_others: true
+            choices:
+              static:
+                - { value: cardiac,   label: Cardiac / heart condition }
+                - { value: diabetes,  label: Diabetes }
+                - { value: asthma,    label: Asthma / respiratory }
+                - { value: cancer,    label: Cancer (current or remission) }
+                - { value: mental,    label: Mental health condition }
+                - { value: pregnancy, label: Pregnancy }
+          - id: medication_list
+            type: multiline
+            label: List any regular medications
+            rows: 3
+            max_length: 500
+
+      # ── 6c. Senior add-on (branch: lead_age >= 65) ───────────────────────
+      - id: senior_addon
+        title: Senior travellers
+        description: >
+          Travellers aged 65+ qualify for our seniors' add-on with extended
+          medical evacuation cover.
+        condition: { ref: is_senior }
+        fields:
+          - id: senior_addon_optin
+            type: boolean
+            label: Add the seniors' medical-evacuation add-on (+£12 / week)
+            display_as: switch
+            default: true
+
+      # ── 6d. Medical review banner (composite: senior OR pre-existing) ────
+      - id: medical_review_notice
+        title: Medical review required
+        description: >
+          Because of the above, a brief telephone medical review may be
+          needed before your policy is bound.
+        condition: { ref: needs_medical_review }
+        fields:
+          - id: agree_medical_review
+            type: boolean
+            label: I agree to a follow-up medical review if requested
+            required: true
+            display_as: checkbox
+
+      # ── 7. Party size + family branch ────────────────────────────────────
+      - id: party
+        title: 5. Travelling party
+        fields:
+          - id: travellers_count
+            type: number
+            label: Total number of travellers (including you)
+            required: true
+            min: 1
+            max: 12
+            number_type: int
+            default: 1
+            display_as: stepper
+            width: half
+
+          # Inline expression condition — appears only when count > 1
+          - id: includes_minors
+            type: boolean
+            label: Does the party include anyone under 18?
+            condition:
+              expression: "fields.travellers_count > 1"
+            display_as: switch
+            default: false
+
+      - id: guardian_section
+        title: Guardian acknowledgement
+        condition: { ref: has_minors }
+        fields:
+          - id: guardian_name
+            type: text
+            label: Name of accompanying adult guardian
+            required: true
+          - id: guardian_consent
+            type: boolean
+            label: I am the legal guardian and consent to cover for the minor(s)
+            required: true
+            display_as: checkbox
+
+      # ── 8. Coverage tier — gates premium-only add-ons ────────────────────
+      - id: coverage
+        title: 6. Coverage
+        fields:
+          - id: coverage_tier
+            type: select
+            label: Coverage Tier
+            required: true
+            display_as: radio
+            choices:
+              static:
+                - { value: basic,    label: "Basic — essentials only" }
+                - { value: standard, label: "Standard — recommended" }
+                - { value: premium,  label: "Premium — full cover + extras" }
+
+      # ── 8a. Premium add-ons (branch: coverage_tier == premium) ───────────
+      - id: premium_addons
+        title: Premium add-ons
+        description: Available because you selected the Premium tier.
+        condition: { ref: is_premium_tier }
+        fields:
+          - id: cancel_for_any_reason
+            type: boolean
+            label: Cancel for any reason (75% refund)
+            display_as: switch
+            default: false
+          - id: concierge_service
+            type: boolean
+            label: 24/7 travel concierge
+            display_as: switch
+            default: false
+          - id: gadget_cover_limit
+            type: number
+            label: Gadget cover limit (£)
+            width: half
+            min: 0
+            max: 10000
+            number_type: int
+            default: 1500
+            prefix: "£"
+            display_as: slider
+
+      # ── 8b. Upgrade nudge (composite branch: basic + any elevated risk) ──
+      - id: upgrade_nudge
+        title: Consider upgrading your tier
+        description: >
+          Based on your answers (high-risk region, extreme activity, or
+          medical review), the Basic tier may leave gaps in your cover.
+        condition: { ref: should_nudge_upgrade }
+        fields:
+          - id: acknowledged_upgrade_nudge
+            type: boolean
+            label: I understand the risks and want to stay on Basic
+            required: true
+            display_as: checkbox
+
+      # ── 9. Final consent ─────────────────────────────────────────────────
+      - id: consent
+        title: 7. Confirm and quote
+        fields:
+          - id: email
+            type: text
+            label: Email for your quote
+            required: true
+            placeholder: "you@example.com"
+            validation:
+              pattern: "^[\\w.+-]+@[\\w-]+\\.[a-zA-Z]{2,}$"
+              pattern_message: "Please enter a valid email address"
+
+          - id: marketing_optin
+            type: boolean
+            label: Email me occasional travel-insurance tips (optional)
+            display_as: checkbox
+            default: false
+
+          - id: terms_accepted
+            type: boolean
+            label: I have read and accept the policy terms
+            required: true
+            display_as: checkbox

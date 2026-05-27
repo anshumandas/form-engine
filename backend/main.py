@@ -11,6 +11,7 @@ from .routers.create_form import router as create_form_router
 from .routers.categories import router as categories_router
 from .routers.ai_chat import router as ai_router
 from .routers.auth import router as auth_router
+from .routers.uam_directory import router as uam_directory_router
 from .middleware.security import SecurityHeadersMiddleware, RequestSizeLimitMiddleware
 import datetime
 
@@ -39,6 +40,7 @@ app.include_router(submissions_router)
 app.include_router(create_form_router)
 app.include_router(categories_router)
 app.include_router(ai_router)
+app.include_router(uam_directory_router)
 
 
 @app.get("/health")
