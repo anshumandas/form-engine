@@ -3,6 +3,7 @@ import { Syne, DM_Sans } from "next/font/google";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/providers/auth-context";
 import { FormEngineProvider } from "@form-engine/components/FormEngineProvider";
+import { formCreatorManifest } from "@/forms/form_creator_manifest";
 import "./globals.css";
 
 const syne = Syne({
@@ -29,7 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         className={`${syne.variable} ${dmSans.variable} font-[family-name:var(--font-dm-sans)] bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100 min-h-screen`}
       >
         <AuthProvider>
-          <FormEngineProvider config={{}}>
+          <FormEngineProvider config={{ localManifests: { form_creator: formCreatorManifest } }}>
             {children}
           </FormEngineProvider>
         </AuthProvider>

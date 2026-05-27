@@ -167,98 +167,356 @@ export const formCreatorManifest: FormManifest = {
   forms: {
 
     // ── create_form ────────────────────────────────────────────────────────
-    // Step 1 of the wizard: name + layout type.
-    // When layout_type = "wizard", an extra section appears asking for page
-    // names (comma-separated) so the engine can scaffold them.
+    // Multi-step wizard. The page ordering is deliberate:
+    //   1. Identity         – give the form a name, id, layout type
+    //   2. Wizard Pages     – (wizard-only, ALWAYS before Fields) define the
+    //                         steps the form will have, so the user thinks
+    //                         about structure before content
+    //   3. Form Fields      – the fields collection; each field optionally
+    //                         carries a `page_fields` ref via the per-page
+    //                         editor downstream (VisualFormBuilder)
+    //   4. Submission       – submit action + messages
+    //
+    // The "Wizard Pages BEFORE Fields" order matches the UX users requested:
+    // "the form creator wizard mode should add wizard pages tab before the
+    // fields tab. Once user adds pages, it should introduce separate tab per
+    // page to take the field info" — the per-page editing step is delegated to
+    // the drag-drop VisualFormBuilder once the skeleton is created.
     create_form: {
-      title:       "Create Form",
-      version:     "1.0.0",
-      form_state:  "active",
-      layout:      { type: "single-page" },
+      title:        "Form Builder",
+      description:  "Design a new form — no code required. The form will be live instantly, rendered by the same engine you are using now.",
+      version:      "1.0.0",
+      form_state:   "active",
+      layout:       { type: "wizard" },
       submit_label: "Create Form",
-      sections: [
+      draft_label:  "Save Draft",
+      on_submit: {
+        type:            "rest",
+        url:             "/api/create-form",
+        method:          "POST",
+        success_message: "🎉 Your form is ready! Redirecting you now…",
+        error_message:   "Could not create the form. Please check your input and try again.",
+      },
+      pages: [
+        // ── Page 1 ── Identity ─────────────────────────────────────────────
         {
           id:    "identity",
           title: "Identity",
-          fields: [
+          description: "Give your form a name, ID, and layout style.",
+          sections: [
             {
-              id:          "title",
-              type:        "text",
-              label:       "Form Title",
-              required:    true,
-              placeholder: "My Form",
-              width:       "half",
+              id:    "identity_section",
+              title: "Basic Information",
+              fields: [
+                {
+                  id:          "form_title",
+                  type:        "text",
+                  label:       "Form Title",
+                  required:    true,
+                  placeholder: "e.g. Customer Onboarding",
+                  hint:        "Shown as the heading on the rendered form.",
+                  max_length:  120,
+                },
+                {
+                  id:             "form_id",
+                  type:           "text",
+                  label:          "Form ID",
+                  required:       true,
+                  width:          "half",
+                  placeholder:    "e.g. customer_onboarding",
+                  hint:           "Lowercase, underscores only. Used in URLs.",
+                  pattern:        "^[a-z][a-z0-9_]*$",
+                  pattern_message:"Only lowercase letters, numbers, and underscores allowed.",
+                  max_length:     60,
+                },
+                {
+                  id:             "manifest_id",
+                  type:           "text",
+                  label:          "Category / Manifest ID",
+                  required:       true,
+                  width:          "half",
+                  placeholder:    "my_manifest",
+                  hint:           "Groups related forms together.",
+                  pattern:        "^[a-z][a-z0-9_]*$",
+                  pattern_message:"Only lowercase letters, numbers, and underscores allowed.",
+                },
+                {
+                  id:          "form_description",
+                  type:        "multiline",
+                  label:       "Description",
+                  rows:        3,
+                  max_length:  500,
+                  placeholder: "Optional subtitle or instructions shown below the title.",
+                  advanced:    true,
+                },
+                {
+                  id:         "layout_type",
+                  type:       "select",
+                  label:      "Layout",
+                  required:   true,
+                  display_as: "button-group",
+                  choices:    LAYOUT_TYPE_CHOICES,
+                },
+              ],
             },
             {
-              id:          "form_id",
-              type:        "text",
-              label:       "Form ID (key)",
-              required:    true,
-              placeholder: "my_form",
-              hint:        "snake_case — used as the YAML/JSON key",
-              width:       "half",
-            },
-            {
-              id:          "description",
-              type:        "multiline",
-              label:       "Description",
-              placeholder: "What is this form for?",
-              rows:        2,
+              id:    "labels_section",
+              title: "Button Labels",
+              description: "Customise the text on the action buttons.",
+              fields: [
+                {
+                  id:          "submit_label",
+                  type:        "text",
+                  label:       "Submit Button",
+                  width:       "half",
+                  placeholder: "Submit",
+                  default:     "Submit",
+                  advanced:    true,
+                },
+                {
+                  id:          "draft_label",
+                  type:        "text",
+                  label:       "Draft Button",
+                  width:       "half",
+                  placeholder: "Save Draft",
+                  default:     "Save Draft",
+                  advanced:    true,
+                },
+              ],
             },
           ],
         },
 
+        // ── Page 2 ── Wizard Pages ─────────────────────────────────────────
+        // Visible ONLY when layout_type = "wizard". Always appears BEFORE the
+        // Fields tab so the user defines structure first.
         {
-          id:    "layout",
-          title: "Layout",
-          fields: [
+          id:          "wizard_pages_page",
+          title:       "Wizard Pages",
+          description: "Define each step of your wizard. You'll add fields to each page on the next step (or in the visual builder afterwards).",
+          condition:   eq("layout_type", "wizard"),
+          sections: [
             {
-              id:          "layout_type",
-              type:        "select",
-              label:       "Layout Type",
-              required:    true,
-              choices:     LAYOUT_TYPE_CHOICES,
-              display_as:  "button-group",
-            },
-            // Wizard-specific: ask for initial page names
-            {
-              id:        "wizard_pages",
-              type:      "text",
-              label:     "Wizard Page Names",
-              hint:      "Comma-separated list, e.g.  Basic Info, Details, Review",
-              placeholder: "Basic Info, Details, Review",
-              condition: eq("layout_type", "wizard"),
-            },
-            // Grid-specific: column count
-            {
-              id:        "grid_columns",
-              type:      "number",
-              label:     "Grid Columns",
-              min:       1,
-              max:       12,
-              display_as: "stepper",
-              condition: eq("layout_type", "grid"),
+              id:          "pages_section",
+              title:       "Pages",
+              description: "Each page becomes a step in the wizard. Reorder with the ▲▼ arrows.",
+              collection: {
+                min_items:           1,
+                max_items:           10,
+                add_label:           "+ Add Page",
+                remove_label:        "Remove",
+                sortable:            true,
+                default_expanded:    true,
+                item_title_template: "{{fields.page_title}}",
+              },
+              fields: [
+                {
+                  id:             "page_id",
+                  type:           "text",
+                  label:          "Page ID",
+                  required:       true,
+                  width:          "half",
+                  placeholder:    "e.g. personal_info",
+                  pattern:        "^[a-z][a-z0-9_]*$",
+                  pattern_message:"Lowercase, underscores only.",
+                },
+                {
+                  id:          "page_title",
+                  type:        "text",
+                  label:       "Page Title",
+                  required:    true,
+                  width:       "half",
+                  placeholder: "e.g. Personal Information",
+                },
+                {
+                  id:          "page_description",
+                  type:        "text",
+                  label:       "Description",
+                  placeholder: "Optional description shown under the page title.",
+                  advanced:    true,
+                },
+                {
+                  id:          "page_fields",
+                  type:        "text",
+                  label:       "Field IDs on this page",
+                  placeholder: "first_name, last_name, email",
+                  hint:        "Comma-separated. Leave blank for now — you can assign fields to pages in the visual builder.",
+                  advanced:    true,
+                },
+                {
+                  id:         "page_icon",
+                  type:       "select",
+                  label:      "Step Icon",
+                  display_as: "dropdown",
+                  advanced:   true,
+                  choices: [
+                    { value: "",          label: "None" },
+                    { value: "User",      label: "👤 User" },
+                    { value: "Briefcase", label: "💼 Briefcase" },
+                    { value: "Heart",     label: "❤ Heart" },
+                    { value: "Lock",      label: "🔒 Lock" },
+                    { value: "Settings",  label: "⚙ Settings" },
+                    { value: "Star",      label: "⭐ Star" },
+                    { value: "Mail",      label: "✉ Mail" },
+                  ],
+                },
+              ],
             },
           ],
         },
 
+        // ── Page 3 ── Form Fields ──────────────────────────────────────────
+        // Always visible. For wizard layouts, this is the flat fields list —
+        // the per-page tabs view is provided by the VisualFormBuilder after
+        // the skeleton is created.
         {
-          id:    "options",
-          title: "Options",
-          fields: [
+          id:          "fields_page",
+          title:       "Form Fields",
+          description: "Add the fields that will appear on your form. After creation you can switch to the visual builder for per-page tab editing.",
+          sections: [
             {
-              id:          "submit_label",
-              type:        "text",
-              label:       "Submit Button Label",
-              placeholder: "Submit",
-              width:       "half",
+              id:          "fields_section",
+              title:       "Fields",
+              description: "Add at least one field. Reorder with the ▲▼ arrows.",
+              collection: {
+                min_items:           1,
+                max_items:           40,
+                add_label:           "+ Add Field",
+                remove_label:        "Remove",
+                sortable:            true,
+                default_expanded:    true,
+                item_title_template: "{{fields.field_label}} ({{fields.field_type}})",
+              },
+              fields: [
+                {
+                  id:             "field_id",
+                  type:           "text",
+                  label:          "Field ID",
+                  required:       true,
+                  width:          "half",
+                  placeholder:    "e.g. first_name",
+                  pattern:        "^[a-z][a-z0-9_]*$",
+                  pattern_message:"Lowercase, underscores only.",
+                  max_length:     60,
+                },
+                {
+                  id:         "field_type",
+                  type:       "select",
+                  label:      "Type",
+                  required:   true,
+                  width:      "half",
+                  display_as: "dropdown",
+                  choices:    FIELD_TYPE_CHOICES,
+                },
+                {
+                  id:          "field_label",
+                  type:        "text",
+                  label:       "Label",
+                  required:    true,
+                  placeholder: "e.g. First Name",
+                  max_length:  80,
+                },
+                {
+                  id:         "field_required",
+                  type:       "boolean",
+                  label:      "Required",
+                  display_as: "checkbox",
+                  default:    false,
+                },
+                {
+                  id:          "field_choices",
+                  type:        "multiline",
+                  label:       "Options (one per line, format: value|Label)",
+                  rows:        4,
+                  max_length:  2000,
+                  placeholder: "yes|Yes\nno|No\nmaybe|Maybe",
+                  hint:        "Each line: value|Display Label. Value is stored, label is shown.",
+                  condition:   inSet("field_type", ["select", "multiselect"]),
+                },
+                {
+                  id:         "field_width",
+                  type:       "select",
+                  label:      "Width",
+                  display_as: "button-group",
+                  default:    "full",
+                  advanced:   true,
+                  choices:    WIDTH_CHOICES,
+                },
+                {
+                  id:          "field_placeholder",
+                  type:        "text",
+                  label:       "Placeholder",
+                  max_length:  120,
+                  placeholder: "Placeholder text shown when empty",
+                  advanced:    true,
+                },
+                {
+                  id:          "field_hint",
+                  type:        "text",
+                  label:       "Hint",
+                  max_length:  200,
+                  placeholder: "Helper text shown below the field",
+                  advanced:    true,
+                },
+                {
+                  id:          "field_default",
+                  type:        "text",
+                  label:       "Default Value",
+                  max_length:  200,
+                  placeholder: "Pre-filled value",
+                  advanced:    true,
+                },
+              ],
             },
+          ],
+        },
+
+        // ── Page 4 ── Submission ───────────────────────────────────────────
+        {
+          id:          "submission_page",
+          title:       "Submission",
+          description: "Configure what happens when the user submits the form.",
+          sections: [
             {
-              id:          "cancel_label",
-              type:        "text",
-              label:       "Cancel Button Label",
-              placeholder: "Cancel",
-              width:       "half",
+              id:    "submit_section",
+              title: "Submit Action",
+              fields: [
+                {
+                  id:         "submit_type",
+                  type:       "select",
+                  label:      "On Submit",
+                  required:   true,
+                  display_as: "radio",
+                  choices: [
+                    { value: "none", label: "Show success message only" },
+                    { value: "rest", label: "POST to a REST endpoint" },
+                  ],
+                },
+                {
+                  id:          "submit_url",
+                  type:        "text",
+                  label:       "Endpoint URL",
+                  required:    true,
+                  placeholder: "https://api.example.com/submissions",
+                  hint:        "The form data will be sent as a JSON POST body.",
+                  condition:   eq("submit_type", "rest"),
+                },
+                {
+                  id:         "success_message",
+                  type:       "text",
+                  label:      "Success Message",
+                  default:    "Form submitted successfully!",
+                  max_length: 300,
+                },
+                {
+                  id:         "error_message",
+                  type:       "text",
+                  label:      "Error Message",
+                  default:    "Submission failed. Please try again.",
+                  max_length: 300,
+                  advanced:   true,
+                },
+              ],
             },
           ],
         },

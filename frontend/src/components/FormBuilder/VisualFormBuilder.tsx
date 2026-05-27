@@ -258,8 +258,9 @@ export function VisualFormBuilder({ manifest, formId, onChange }: VisualFormBuil
         {isWizard && (
           <div className="flex-shrink-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center overflow-x-auto">
-              {/* Pages overview tab */}
+              {/* Wizard Pages overview tab — always appears BEFORE per-page field tabs */}
               <button
+                type="button"
                 onClick={() => setActivePageTab("pages")}
                 className={cn(
                   "flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap",
@@ -267,7 +268,7 @@ export function VisualFormBuilder({ manifest, formId, onChange }: VisualFormBuil
                     ? "border-blue-500 text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/10"
                     : "border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
                 )}>
-                <span>📋</span> Pages
+                <span>📋</span> Wizard Pages
               </button>
 
               <span className="text-gray-200 dark:text-gray-700 flex-shrink-0 select-none mx-0.5 text-xs">│</span>

@@ -19,6 +19,7 @@ import { cn } from "@form-engine/libs/utils";
 import type { FormManifest, FieldAnswers } from "@form-engine/libs/types";
 import { FormEngine } from "@form-engine/components/FormEngine";
 import { VisualFormBuilder } from "@/components/FormBuilder/VisualFormBuilder";
+import { buildFormFromCreatorAnswers } from "@/forms/form-creator-utils";
 import { api } from "@/api";
 import { toast } from "sonner";
 
@@ -1128,6 +1129,9 @@ function FormComponentPanel({
   onFormAdded: (fm: FormManifest) => void; onApplyConfig: (a: FieldAnswers) => void;
   embeddedForms: FormManifest | null;
 }) {
+  // Tracks the form just created via the wizard so we can hand off to
+  // VisualFormBuilder for per-page field editing without losing context.
+  const [wizardCreatedFormId, setWizardCreatedFormId] = useState<string | null>(null);
   return (
     <div className="rounded-2xl border-2 border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-900/10 overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-3 border-b border-purple-100 dark:border-purple-800/60">
@@ -1159,59 +1163,66 @@ function FormComponentPanel({
       )}
       {formPickerMode === "wizard" && (
         <div className="p-4">
-          {formCreatorLoading && (
+          {/* Stage 1 — creator form (collect identity, pages, fields, submission) */}
+          {!wizardCreatedFormId && formCreatorLoading && (
             <div className="flex items-center justify-center py-8 gap-2 text-gray-400 text-sm">
               <span className="h-4 w-4 rounded-full border-2 border-gray-300 border-t-purple-500 animate-spin" />
               Loading…
             </div>
           )}
-          {!formCreatorLoading && !formCreatorManifest && (
+          {!wizardCreatedFormId && !formCreatorLoading && !formCreatorManifest && (
             <div className="text-center py-6 text-sm text-gray-400 space-y-2">
               <p>Could not load the form creator.</p>
               <button onClick={onNeedFormCreator} className="text-purple-500 hover:underline text-xs">Retry</button>
             </div>
           )}
-          {formCreatorManifest && (
+          {!wizardCreatedFormId && formCreatorManifest && (
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-purple-200 dark:border-purple-800 overflow-hidden">
               <FormEngine
                 key="form-creator"
                 manifest={formCreatorManifest}
                 formId="create_form"
                 onSubmit={async (answers) => {
-                  const formId     = slugify(String(answers.form_id ?? "")) || `form_${Date.now()}`;
-                  const layoutType = String(answers.layout_type ?? "single-page");
-
-                  // Build wizard pages from comma-separated names field
-                  const rawPageNames = String(answers.wizard_pages ?? "").trim();
-                  const pageNames = layoutType === "wizard" && rawPageNames
-                    ? rawPageNames.split(",").map(s => s.trim()).filter(Boolean)
-                    : ["Page 1"];
-
-                  const pages = pageNames.map((name, i) => ({
-                    id:       `page_${i + 1}`,
-                    title:    name,
-                    sections: [{ id: `s_page_${i + 1}`, title: "Fields", fields: [] }],
-                  }));
-
-                  onFormAdded({
-                    manifest_id:      manifest.manifest_id,
-                    manifest_version: "1.0.0",
-                    forms: {
-                      [formId]: {
-                        title:        String(answers.title ?? "New Form"),
-                        version:      "1.0.0",
-                        form_state:   "active",
-                        layout:       { type: layoutType },
-                        submit_label: String(answers.submit_label || "Submit") || undefined,
-                        sections:     layoutType !== "wizard"
-                          ? [{ id: "section_1", title: "Section 1", fields: [] }]
-                          : undefined,
-                        pages: layoutType === "wizard" ? pages : undefined,
-                      } as unknown,
-                    },
-                  } as FormManifest);
+                  const { formId, manifest: skeleton } = buildFormFromCreatorAnswers(answers, manifest.manifest_id);
+                  onFormAdded(skeleton);
+                  setWizardCreatedFormId(formId);
+                  toast.success(`Form "${formId}" created — add fields per page below`);
                 }}
               />
+            </div>
+          )}
+
+          {/* Stage 2 — per-page field editing via VisualFormBuilder */}
+          {wizardCreatedFormId && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between rounded-lg bg-purple-100/60 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800 px-3 py-2">
+                <div className="flex items-center gap-2 text-xs text-purple-800 dark:text-purple-200">
+                  <span>✅</span>
+                  <span>
+                    Form skeleton created. Use the tabs below to add fields to each page.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setWizardCreatedFormId(null)}
+                  className="text-[11px] text-purple-600 dark:text-purple-300 hover:underline"
+                >
+                  + Create another
+                </button>
+              </div>
+              {embeddedForms && embeddedForms.forms?.[wizardCreatedFormId] ? (
+                <div className="h-[480px] rounded-xl overflow-hidden border border-purple-200 dark:border-purple-800 bg-white dark:bg-gray-900">
+                  <VisualFormBuilder
+                    manifest={embeddedForms}
+                    formId={wizardCreatedFormId}
+                    onChange={fm => onFormAdded(fm)}
+                  />
+                </div>
+              ) : (
+                <div className="text-center py-6 text-sm text-gray-400">
+                  Could not locate the newly created form ("{wizardCreatedFormId}").
+                </div>
+              )}
             </div>
           )}
         </div>
