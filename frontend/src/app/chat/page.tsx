@@ -20,15 +20,16 @@ interface Message {
 
 type ChatMode = "fill" | "create" | "help";
 
-// ─── Claude API helper ─────────────────────────────────────────────────────────
+// ─── AI chat helper (backend picks provider: anthropic | ollama) ──────────────
 async function callClaude(
   systemPrompt: string,
-  messages: { role: "user" | "assistant"; content: string }[]
+  messages: { role: "user" | "assistant"; content: string }[],
+  mode: ChatMode,
 ): Promise<string> {
   const res = await fetch("/api/ai/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ system: systemPrompt, messages }),
+    body: JSON.stringify({ system: systemPrompt, messages, mode }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "AI error" }));
@@ -211,7 +212,7 @@ function ChatPageInner() {
       history.push({ role: "user", content: text.trim() });
 
       const system = buildSystemPrompt(mode, manifest, activeFid, answers);
-      const rawReply = await callClaude(system, history);
+      const rawReply = await callClaude(system, history, mode);
       const parsed = parseResponse(rawReply);
 
       // Handle actions

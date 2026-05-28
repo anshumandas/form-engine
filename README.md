@@ -62,6 +62,13 @@ services:
       - ANTHROPIC_API_KEY=sk-ant-...
 ```
 
+Or run a **local LLM** with no API key — see [backend/training/README.md](backend/training/README.md):
+
+```bash
+LLM_PROVIDER=ollama docker compose --profile local-ai up
+docker compose exec ollama ollama pull qwen2.5-coder:7b
+```
+
 ---
 
 ### Option B — Local Development
@@ -349,7 +356,11 @@ import type { FormManifest, FormField, FieldAnswers, StaticChoice } from '@form-
 ### Backend
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ANTHROPIC_API_KEY` | *(empty)* | Claude API key for AI chat feature |
+| `LLM_PROVIDER` | `anthropic` | `anthropic` (Claude API) or `ollama` (local model) |
+| `ANTHROPIC_API_KEY` | *(empty)* | Claude API key — required when `LLM_PROVIDER=anthropic` |
+| `ANTHROPIC_MODEL` | `claude-sonnet-4-5` | Claude model name |
+| `OLLAMA_BASE_URL` | `http://ollama:11434` | Ollama daemon URL (in compose); use `http://localhost:11434` for bare-metal |
+| `OLLAMA_MODEL` | `qwen2.5-coder:7b` | Ollama model tag — use `form-engine-qwen` after fine-tuning |
 
 ### Frontend
 | Variable | Default | Description |

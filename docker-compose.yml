@@ -13,8 +13,15 @@ services:
       - "8000:8000"
     environment:
       - PYTHONUNBUFFERED=1
-      # Pass through from your shell/.env to enable the AI chat feature (optional).
+      # AI chat — pick ONE provider:
+      #   anthropic (default): needs ANTHROPIC_API_KEY
+      #   ollama:              uses the `ollama` service below
+      #                        (run with `--profile local-ai`)
+      - LLM_PROVIDER=${LLM_PROVIDER:-anthropic}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-4-5}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5-coder:7b}
     volumes:
       # Mounted as a package dir so `backend.main:app` + --reload work in dev.
       - ./backend:/app/backend
@@ -42,6 +49,35 @@ services:
       api:
         condition: service_healthy
     restart: unless-stopped
+
+  # ── Ollama (local LLM, opt-in via `--profile local-ai`) ─────────────────────
+  # Start with:   docker compose --profile local-ai up
+  # Pull a model: docker compose exec ollama ollama pull qwen2.5-coder:7b
+  # GPU mode:     uncomment the `deploy:` block below (requires NVIDIA Container Toolkit)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: form-engine-ollama
+    profiles: ["local-ai"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+volumes:
+  ollama_models:
 
 networks:
   default:

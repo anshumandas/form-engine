@@ -11,6 +11,12 @@ const nextConfig = {
   // multi-stage frontend Dockerfile, which copies .next/standalone + static.
   output: "standalone",
 
+  // Local LLM cold-starts (Ollama model load) can take 60-90s. Bump the dev
+  // proxy timeout so /api/ai/chat doesn't get ECONNRESET on the first call.
+  experimental: {
+    proxyTimeout: 180_000,
+  },
+
   // ── Webpack config for path aliases ─────────────────────────────────────────
   webpack: (config) => {
     config.resolve.alias = {
