@@ -24,11 +24,13 @@ services:
         pytest
 
   # ── Lib: vitest (jsdom) ──────────────────────────────────────────────────────
+  # The lib was extracted to the shared core lib repo (../../sharedCoreLib/form-engine-lib),
+  # so it is mounted from there rather than from this app repo.
   lib-tests:
     image: node:20-bookworm-slim
-    working_dir: /repo/lib
+    working_dir: /lib
     volumes:
-      - ./:/repo
+      - ../../sharedCoreLib/form-engine-lib:/lib
       - test-node-cache:/root/.npm
     command:
       - bash

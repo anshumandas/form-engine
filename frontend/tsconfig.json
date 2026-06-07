@@ -25,7 +25,7 @@
     ],
     "paths": {
       "@form-engine/*": [
-        "../lib/src/*"
+        "../../../sharedCoreLib/form-engine-lib/src/*"
       ],
       "@/*": [
         "./src/*"

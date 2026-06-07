@@ -5,8 +5,8 @@
 # Hybrid setup (matches scripts\dev.ps1 patterns):
 #   - api + ollama run in Docker (so the api container can talk to ollama by name)
 #   - frontend runs bare-metal via 'npm run dev' so the @form-engine/* tsconfig
-#     alias to ../lib/src/* resolves on the host filesystem
-#     (the web Dockerfile can't see ../lib because its build context is ./frontend)
+#     alias to ../../../sharedCoreLib/form-engine-lib/src/* resolves on the host filesystem
+#     (the web Dockerfile can't see the shared lib because its build context is ./frontend)
 #
 # Override the model:        $env:OLLAMA_MODEL = "llama3.1:8b"
 # Use a fine-tuned model:    $env:OLLAMA_MODEL = "form-engine-qwen"
@@ -125,7 +125,7 @@ try {
     Write-Host "   (the chat will still work, but the first request will be slow)" -ForegroundColor DarkYellow
 }
 
-# 7. Start frontend bare-metal so it can resolve @form-engine/* -> ../lib/src/*.
+# 7. Start frontend bare-metal so it can resolve @form-engine/* -> ../../../sharedCoreLib/form-engine-lib/src/*.
 Write-Host ""
 Write-Host "-- Starting frontend (next dev :3000) --" -ForegroundColor Cyan
 $frontend = Start-Process -FilePath "npm.cmd" `

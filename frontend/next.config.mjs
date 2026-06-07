@@ -21,7 +21,7 @@ const nextConfig = {
   webpack: (config) => {
     config.resolve.alias = {
       ...config.resolve.alias,
-      '@form-engine': path.resolve(__dirname, '../lib/src'),
+      '@form-engine': path.resolve(__dirname, '../../../sharedCoreLib/form-engine-lib/src'),
     };
     return config;
   },

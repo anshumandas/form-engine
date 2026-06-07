@@ -6,8 +6,8 @@
 # Hybrid setup (matches scripts/dev.sh patterns):
 #   - api + ollama run in Docker (so the api container can talk to ollama by name)
 #   - frontend runs bare-metal via 'npm run dev' so the @form-engine/* tsconfig
-#     alias to ../lib/src/* resolves on the host filesystem
-#     (the web Dockerfile can't see ../lib because its build context is ./frontend)
+#     alias to ../../../sharedCoreLib/form-engine-lib/src/* resolves on the host filesystem
+#     (the web Dockerfile can't see the shared lib because its build context is ./frontend)
 #
 # Override the model:        OLLAMA_MODEL=llama3.1:8b bash scripts/dev-local-ai.sh
 # Use a fine-tuned model:    OLLAMA_MODEL=form-engine-qwen bash scripts/dev-local-ai.sh
@@ -113,7 +113,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# 8. Start frontend bare-metal so it can resolve @form-engine/* -> ../lib/src/*.
+# 8. Start frontend bare-metal so it can resolve @form-engine/* -> ../../../sharedCoreLib/form-engine-lib/src/*.
 echo
 echo "-- Starting frontend (next dev :3000) --"
 ( cd "$ROOT/frontend" && npm run dev ) &
